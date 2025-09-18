@@ -86,7 +86,10 @@
             <div id="reflection-hub" class="tab-content">
                 <div class="smart-list-header">
                     <h2>Reflection Hub</h2>
-                    <button id="new-writing-btn"><i class="fas fa-plus"></i> 새 글쓰기</button>
+                    <div class="header-buttons">
+                        <button id="new-writing-btn"><i class="fas fa-plus"></i> 새 글쓰기</button>
+                        <button id="open-trash-btn" title="휴지통"><i class="fas fa-trash"></i></button>
+                    </div>
                 </div>
                 <div id="smart-writing-list">
                     </div>
@@ -134,10 +137,22 @@
                 <textarea id="popup-content" placeholder="내용을 입력하세요..."></textarea>
             </main>
         </div>
+
+        <!-- 휴지통 모달 추가 -->
+        <div id="trash-modal" style="display: none;">
+            <div class="trash-content">
+                <div class="trash-header">
+                    <h2>휴지통</h2>
+                    <button id="close-trash-btn">&times;</button>
+                </div>
+                <p class="trash-info">삭제된 항목은 30일 후에 영구적으로 제거됩니다.</p>
+                <div id="trash-list"></div>
+            </div>
+        </div>
+
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     
-    <!-- [수정] Firebase SDK import 순서를 명확히 하고, 모듈 방식으로 통합 -->
     <script type="module" src="dashboard.js"></script>
 </body>
 </html>
