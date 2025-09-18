@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // 모달 관련 DOM 요소
     const editorModal = document.getElementById('editor-modal');
+    const editorModalOverlay = document.getElementById('editor-modal-overlay');
     const titleInput = document.getElementById('popup-title');
     const contentInput = document.getElementById('popup-content');
     const saveBtn = document.getElementById('save-and-close-btn');
@@ -374,7 +375,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         listenForWritings();
     }
-
+    
     function openEditorModal(writing = null, id = null, startInEditMode = false, draftId = null) {
         currentWritingId = id;
         currentDraftId = draftId;
@@ -406,8 +407,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         setModalMode(startInEditMode);
-        editorModal.style.display = 'flex';
+        editorModalOverlay.style.display = 'flex';
     }
+    
+    editorModalOverlay.addEventListener('click', (e) => {
+        if (e.target === editorModalOverlay) {
+            handleCloseAttempt(false);
+        }
+    });
 
     function setModalMode(edit) {
         isEditMode = edit;
@@ -433,7 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     function closeEditorModal() {
-        editorModal.style.display = 'none';
+        editorModalOverlay.style.display = 'none';
         currentWritingId = null;
         currentDraftId = null;
         isEditMode = false;
@@ -532,7 +539,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const finalDocRef = doc(collectionRef, savedWritingId);
             const finalDocSnap = await getDoc(finalDocRef);
             if (finalDocSnap.exists()) {
-                openEditorModal(finalDocSnap.data(), savedWritingId, false);
+                openEditorModal(finalDocSnap.data(), finalDocSnap.id, false);
             } else {
                 closeEditorModal();
             }

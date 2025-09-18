@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Growth Engine Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="dashboard.css">
@@ -138,35 +138,37 @@
             </div>
         </main>
         
-        <div id="editor-modal">
-            <header class="editor-header">
-                <h1 id="modal-title">글 보기</h1>
-                <div class="header-right-buttons">
-                    <div class="button-group" id="read-mode-buttons">
-                        <button id="edit-writing-btn">수정</button>
+        <div id="editor-modal-overlay" class="modal-overlay">
+            <div id="editor-modal">
+                <header class="editor-header">
+                    <h1 id="modal-title">글 보기</h1>
+                    <div class="header-right-buttons">
+                        <div class="button-group" id="read-mode-buttons">
+                            <button id="edit-writing-btn">수정</button>
+                        </div>
+                        <div class="button-group" id="write-mode-buttons" style="display: none;">
+                            <button id="save-draft-btn">임시저장</button>
+                            <button id="save-and-close-btn">저장</button>
+                            <button id="cancel-edit-btn">취소</button>
+                        </div>
+                        <button id="save-and-blog-btn" title="블로그로 복사">
+                            <i class="fa-solid fa-n"></i>
+                        </button>
+                        <button id="close-modal-btn" class="close-icon-btn">&times;</button>
                     </div>
-                    <div class="button-group" id="write-mode-buttons" style="display: none;">
-                        <button id="save-draft-btn">임시저장</button>
-                        <button id="save-and-close-btn">저장</button>
-                        <button id="cancel-edit-btn">취소</button>
+                </header>
+                <main class="editor-main">
+                    <div id="read-mode-content">
+                        <h2 id="read-title"></h2>
+                        <div id="read-tags"></div>
+                        <p id="read-body"></p>
                     </div>
-                    <button id="save-and-blog-btn" title="블로그로 복사">
-                        <i class="fa-solid fa-n"></i>
-                    </button>
-                    <button id="close-modal-btn" class="close-icon-btn">&times;</button>
-                </div>
-            </header>
-            <main class="editor-main">
-                <div id="read-mode-content">
-                    <h2 id="read-title"></h2>
-                    <div id="read-tags"></div>
-                    <p id="read-body"></p>
-                </div>
-                <div id="write-mode-content" style="display: none;">
-                    <input type="text" id="popup-title" placeholder="제목을 입력하세요">
-                    <textarea id="popup-content" placeholder="내용을 입력하세요..."></textarea>
-                </div>
-            </main>
+                    <div id="write-mode-content" style="display: none;">
+                        <input type="text" id="popup-title" placeholder="제목을 입력하세요">
+                        <textarea id="popup-content" placeholder="내용을 입력하세요..."></textarea>
+                    </div>
+                </main>
+            </div>
         </div>
 
         <div id="trash-modal" class="modal-overlay">
@@ -196,4 +198,3 @@
     <script type="module" src="dashboard.js"></script>
 </body>
 </html>
-
