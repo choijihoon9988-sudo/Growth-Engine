@@ -1,83 +1,69 @@
-/* [수정 완료] functions/index.js */
-
-const functions = require("firebase-functions");
-const admin = require("firebase-admin");
-const axios = require("axios");
-
-/*
- [수정] Firebase Functions 환경에서는 .env 파일보다 환경 변수 설정을 사용하는 것이 권장됨.
- require("dotenv").config(); 로 변경하거나, 아래 주석처럼 Firebase CLI를 통해 설정.
- firebase functions:config:set gemini.key="YOUR_API_KEY"
-*/
-require("dotenv").config();
-
-admin.initializeApp();
-const db = admin.firestore();
-
-// [수정] Firebase 환경 변수에서 Gemini API 키를 가져오도록 수정.
-// 로컬 테스트 시에는 functions/.env 파일에 GEMINI_KEY="YOUR_KEY" 형식으로 저장.
-const GEMINI_API_KEY = functions.config().gemini ? functions.config().gemini.key : process.env.GEMINI_KEY;
-
-
-exports.generateSummary = functions.region("asia-northeast3")
-    .firestore.document("users/{userId}/writings/{writingId}")
-    .onWrite(async (change, context) => {
-        // 문서가 삭제된 경우 함수 종료
-        if (!change.after.exists) {
-            return null;
-        }
-
-        const data = change.after.data();
-        const content = data.content;
-
-        // 요약이 이미 있거나, 내용이 너무 짧으면 함수 종료
-        if (data.summary || !content || content.length < 50) {
-            return null;
-        }
-
-        // 내용이 변경되지 않았으면 함수 종료 (성능 최적화)
-        if (change.before.exists && content === change.before.data().content) {
-            return null;
-        }
-        
-        // API 키가 설정되지 않은 경우 오류 처리
-        if (!GEMINI_API_KEY) {
-             console.error("Gemini API 키가 설정되지 않았습니다. 'firebase functions:config:set gemini.key=...'를 실행하세요.");
-             return change.after.ref.update({ summary: "오류: API 키가 설정되지 않았습니다." });
-        }
+// [수정 완료] dashboard.js (saveWriting 함수 부분)
+    async function saveWriting() {
+        // 버튼 비활성화
+        saveBtn.disabled = true;
+        blogBtn.disabled = true;
+        saveBtn.textContent = '저장 중...';
 
         try {
-            const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${GEMINI_API_KEY}`;
-            const requestData = {
-                contents: [{
-                    parts: [{
-                        // [개선] 프롬프트를 더 명확하게 수정
-                        text: `다음 텍스트를 전문적이고 간결한 한국어 한 문장으로 요약해줘.\n\n---\n${content}`
-                    }]
-                }],
-                generationConfig: {
-                    temperature: 0.4,
-                    maxOutputTokens: 100,
-                }
-            };
+            const title = titleInput.value.trim();
+            const content = contentInput.value.trim();
 
-            const response = await axios.post(apiUrl, requestData, {
-                headers: { "Content-Type": "application/json" }
-            });
-            
-            // [수정] API 응답 구조에 대한 예외 처리 강화
-            if (response.data && response.data.candidates && response.data.candidates.length > 0 && response.data.candidates[0].content && response.data.candidates[0].content.parts && response.data.candidates[0].content.parts.length > 0) {
-                const summary = response.data.candidates[0].content.parts[0].text.trim();
-                return change.after.ref.update({ summary: summary });
-            } else {
-                // [수정] 응답 구조가 예상과 다를 경우 로그 기록
-                console.error("Gemini API로부터 유효한 요약을 받지 못했습니다. 응답:", JSON.stringify(response.data));
-                return change.after.ref.update({ summary: "요약 생성에 실패했습니다." });
+            if (!title || !content) {
+                alert('제목과 내용을 모두 입력해야 합니다.');
+                return false; // 저장 실패
             }
 
+            const dataToSave = {
+                title: title,
+                content: content,
+                updatedAt: serverTimestamp()
+            };
+            const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
+
+            if (currentWritingId) {
+                const docRef = doc(collectionRef, currentWritingId);
+                await updateDoc(docRef, dataToSave);
+            } else {
+                dataToSave.createdAt = serverTimestamp();
+                const docRef = await addDoc(collectionRef, dataToSave);
+                currentWritingId = docRef.id;
+            }
+            return true; // 저장 성공
+
         } catch (error) {
-            // [수정] 오류 로깅을 더 상세하게 변경
-            console.error("Gemini API 호출 중 오류 발생:", error.response ? JSON.stringify(error.response.data) : error.message);
-            return change.after.ref.update({ summary: "요약 생성 중 오류가 발생했습니다." });
+            console.error("Firestore 저장 오류:", error);
+            let errorMessage = "글 저장에 실패했습니다. 다시 시도해 주세요.";
+            if (error.code === 'permission-denied') {
+                errorMessage = "권한이 없어 글을 저장할 수 없습니다. Firebase 보안 규칙을 확인해 주세요.";
+            } else if (error.code === 'unauthenticated') {
+                errorMessage = "로그인 상태가 아닙니다. 다시 로그인해 주세요.";
+            }
+            alert(errorMessage);
+            return false; // 저장 실패
+        } finally {
+            // [수정] 성공/실패 여부와 관계없이 버튼 상태를 항상 원래대로 복구
+            saveBtn.disabled = false;
+            blogBtn.disabled = false;
+            saveBtn.textContent = '저장 후 닫기';
+            blogBtn.innerHTML = '<i class="fa-solid fa-n"></i>'; // 아이콘으로 복구
+        }
+    }
+
+    // '저장 후 닫기' 버튼 이벤트 리스너
+    saveBtn.addEventListener('click', async () => {
+        const success = await saveWriting();
+        if (success) {
+            closeEditorModal();
+        }
+    });
+
+    // '저장 후 블로그로 이동' 버튼 이벤트 리스너
+    blogBtn.addEventListener('click', async () => {
+        const success = await saveWriting();
+        if (success) {
+            const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
+            window.open(blogUrl, '_blank');
+            closeEditorModal();
         }
     });

@@ -1,9 +1,4 @@
 {
-
-  "functions": {
-    "source": "functions/functions"
-  },
-
   "hosting": {
     "public": ".",
     "ignore": [
@@ -11,5 +6,8 @@
       "**/.*",
       "**/node_modules/**"
     ]
+  },
+  "functions": {
+    "source": "functions"
   }
 }

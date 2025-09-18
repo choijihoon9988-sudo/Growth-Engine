@@ -1,11 +1,27 @@
-import { app } from "./firebase-config.js";
+// [수정] firebase-config.js 내용을 통합하고, SDK import를 한 곳에서 관리
+import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDocs, query, orderBy, serverTimestamp, onSnapshot, where, Timestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, query, orderBy, serverTimestamp, onSnapshot, where, Timestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-functions.js";
 
+
+// Your web app's Firebase configuration
+const firebaseConfig = {
+    apiKey: "AIzaSyDJJLSOPg-nExI-nISWbS-NPwIPsiO3-VI",
+    authDomain: "growth-engine-9c6ab.firebaseapp.com",
+    projectId: "growth-engine-9c6ab",
+    storageBucket: "growth-engine-9c6ab.appspot.com", // [수정] .firebasestorage.app -> .appspot.com
+    messagingSenderId: "90122365916",
+    appId: "1:90122365916:web:a41acfdac4699bcd067d19",
+    measurementId: "G-T8JC3C73RM"
+};
+
+// Initialize Firebase
+const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const functions = getFunctions(app);
+const functions = getFunctions(app, "asia-northeast3"); // [수정] Cloud Functions 리전 명시
+
 
 document.addEventListener('DOMContentLoaded', () => {
     // 전역 변수 선언
@@ -247,6 +263,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.appendChild(deleteBtn);
                 todoList.appendChild(li);
             });
+        }, (error) => {
+            console.error("Todo 수신 오류:", error);
         });
         unsubscribeListeners.push(unsubscribe);
     }
@@ -256,7 +274,6 @@ document.addEventListener('DOMContentLoaded', () => {
     
         const canvas = document.getElementById('pomodoro-stats-chart');
         if (!canvas) {
-            console.error("캔버스 요소를 찾을 수 없습니다.");
             return;
         }
         const ctx = canvas.getContext('2d');
@@ -323,12 +340,6 @@ document.addEventListener('DOMContentLoaded', () => {
         titleInput.value = writing ? writing.title : '';
         contentInput.value = writing ? writing.content : '';
         currentWritingId = id;
-        
-        // 버튼 상태 초기화
-        saveBtn.disabled = false;
-        blogBtn.disabled = false;
-        saveBtn.textContent = '저장 후 닫기';
-        blogBtn.textContent = '저장 후 블로그로 이동';
     }
     
     function closeEditorModal() {
@@ -336,92 +347,59 @@ document.addEventListener('DOMContentLoaded', () => {
         currentWritingId = null;
     }
 
-    // [수정] 저장 로직을 하나의 함수로 통합하여 중복 제거 및 안정성 확보
     async function saveWriting() {
-        const title = titleInput.value.trim();
-        const content = contentInput.value.trim();
-
-        if (!title || !content) {
-            alert('제목과 내용을 모두 입력해야 합니다.');
-            return false; // 저장 실패
-        }
-
-        const dataToSave = {
-            title: title,
-            content: content,
-            updatedAt: serverTimestamp()
-        };
-        const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
+        saveBtn.disabled = true;
+        blogBtn.disabled = true;
+        saveBtn.textContent = '저장 중...';
 
         try {
+            const title = titleInput.value.trim();
+            const content = contentInput.value.trim();
+
+            if (!title || !content) {
+                alert('제목과 내용을 모두 입력해야 합니다.');
+                return false;
+            }
+
+            const dataToSave = {
+                title: title,
+                content: content,
+                updatedAt: serverTimestamp()
+            };
+            const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
+
             if (currentWritingId) {
                 const docRef = doc(collectionRef, currentWritingId);
                 await updateDoc(docRef, dataToSave);
             } else {
                 dataToSave.createdAt = serverTimestamp();
                 const docRef = await addDoc(collectionRef, dataToSave);
-                currentWritingId = docRef.id; // 새 문서 ID 저장
+                currentWritingId = docRef.id;
             }
-            return true; // 저장 성공
+            return true;
         } catch (error) {
             console.error("Firestore 저장 오류:", error);
-            let errorMessage = "글 저장에 실패했습니다. 다시 시도해 주세요.";
-            if (error.code === 'permission-denied') {
-                errorMessage = "권한이 없어 글을 저장할 수 없습니다. Firebase 보안 규칙을 확인해 주세요.";
-            } else if (error.code === 'unauthenticated') {
-                errorMessage = "로그인 상태가 아닙니다. 다시 로그인해 주세요.";
-            }
-            alert(errorMessage);
-            return false; // 저장 실패
+            alert("글 저장에 실패했습니다. 다시 시도해 주세요.");
+            return false;
+        } finally {
+            saveBtn.disabled = false;
+            blogBtn.disabled = false;
+            saveBtn.textContent = '저장 후 닫기';
+            blogBtn.innerHTML = '<i class="fa-solid fa-n"></i>';
         }
     }
 
-    // '저장 후 닫기' 버튼 이벤트 리스너
     saveBtn.addEventListener('click', async () => {
-        saveBtn.disabled = true;
-        blogBtn.disabled = true;
-        saveBtn.textContent = '저장 중...';
-
-        const success = await saveWriting();
-
-        if (success) {
+        if (await saveWriting()) {
             closeEditorModal();
-        } else {
-             saveBtn.textContent = '저장 실패';
-        }
-        
-        // finally 블록 대신 성공/실패에 따라 버튼 상태 복원
-        saveBtn.disabled = false;
-        blogBtn.disabled = false;
-        if(saveBtn.textContent !== '저장 실패') {
-            saveBtn.textContent = '저장 후 닫기';
         }
     });
 
-    // '저장 후 블로그로 이동' 버튼 이벤트 리스너
     blogBtn.addEventListener('click', async () => {
-        saveBtn.disabled = true;
-        blogBtn.disabled = true;
-        blogBtn.textContent = '저장 중...';
-
-        const success = await saveWriting();
-
-        if (success) {
+        if (await saveWriting()) {
             const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
             window.open(blogUrl, '_blank');
             closeEditorModal();
-        } else {
-            blogBtn.textContent = '저장 실패';
-        }
-        
-        // finally 블록 대신 성공/실패에 따라 버튼 상태 복원
-        saveBtn.disabled = false;
-        blogBtn.disabled = false;
-        if(blogBtn.textContent !== '저장 실패') {
-           blogBtn.innerHTML = '<i class="fa-solid fa-n"></i>';
-        }
-         if (saveBtn.textContent !== '저장 실패') {
-            saveBtn.textContent = '저장 후 닫기';
         }
     });
 
@@ -443,7 +421,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.dataset.id = id;
                 const date = writing.updatedAt?.toDate().toLocaleString() || '날짜 없음';
                 
-                // [개선] 요약이 있을 경우 함께 표시
                 const summary = writing.summary || (writing.content || '').substring(0, 150) + '...';
 
                 item.innerHTML = `
@@ -461,6 +438,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 option.textContent = writing.title || '무제';
                 selectElement.appendChild(option);
             });
+        }, (error) => {
+            console.error("글 목록 수신 오류:", error);
         });
         unsubscribeListeners.push(unsubscribe);
     }
@@ -488,21 +467,21 @@ document.addEventListener('DOMContentLoaded', () => {
             const docRef = doc(db, `users/${currentUser.uid}/writings`, writingId);
             const docSnap = await getDoc(docRef);
 
-            if (docSnap.exists()) {
-                const textContent = docSnap.data().content;
-                if (!textContent || textContent.trim() === '') {
-                    alert('분석할 내용이 없습니다.');
-                    loadingSpinner.style.display = 'none';
-                    return;
-                }
-                
-                const analyzeText = httpsCallable(functions, 'analyzeText');
-                const result = await analyzeText({ text: textContent });
-                displayAnalysisResults(result.data);
-
-            } else {
-                throw new Error("문서를 찾을 수 없습니다.");
+            if (!docSnap.exists()) {
+                 throw new Error("문서를 찾을 수 없습니다.");
             }
+            
+            const textContent = docSnap.data().content;
+            if (!textContent || textContent.trim() === '') {
+                alert('분석할 내용이 없습니다.');
+                loadingSpinner.style.display = 'none';
+                return;
+            }
+            
+            const analyzeText = httpsCallable(functions, 'analyzeText');
+            const result = await analyzeText({ text: textContent });
+            displayAnalysisResults(result.data);
+
         } catch (error) {
             console.error('분석 중 오류 발생:', error);
             alert(`분석에 실패했습니다: ${error.message}`);
@@ -519,15 +498,11 @@ document.addEventListener('DOMContentLoaded', () => {
         sentimentChart = new Chart(sentimentCtx, {
             type: 'doughnut',
             data: {
+                // [수정] 현재는 개체 분석만 지원하므로 감성 분석은 비활성화
                 labels: ['긍정', '부정', '중립', '복합'],
                 datasets: [{
                     label: '감성 점수',
-                    data: [
-                        data.sentiment.Positive, 
-                        data.sentiment.Negative, 
-                        data.sentiment.Neutral, 
-                        data.sentiment.Mixed
-                    ],
+                    data: [0,0,0,0], // data.sentiment 값으로 채워야 함
                     backgroundColor: ['#28a745', '#dc3545', '#ffc107', '#6c757d']
                 }]
             },
@@ -536,13 +511,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const entityList = document.getElementById('entity-list');
         entityList.innerHTML = '';
-        data.entities.slice(0, 10).forEach(entity => {
-            const li = document.createElement('li');
-            li.innerHTML = `${entity.Text} <span class="salience">(${entity.Type}, 중요도: ${entity.Score.toFixed(2)})</span>`;
-            entityList.appendChild(li);
-        });
+        if(data.entities && data.entities.length > 0) {
+            data.entities.slice(0, 10).forEach(entity => {
+                const li = document.createElement('li');
+                li.innerHTML = `${entity.name} <span class="salience">(${entity.type}, 중요도: ${entity.salience.toFixed(2)})</span>`;
+                entityList.appendChild(li);
+            });
+        } else {
+             entityList.innerHTML = '<li>추출된 키워드가 없습니다.</li>';
+        }
+        
 
         const categoryResult = document.getElementById('category-result');
-        categoryResult.textContent = data.categories.length > 0 ? data.categories[0].Name : '분류된 카테고리 없음';
+        // [수정] 현재는 카테고리 분석을 지원하지 않음
+        categoryResult.textContent = '카테고리 분석 결과 없음';
     }
 });
