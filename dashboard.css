@@ -151,6 +151,7 @@ body {
     color: #333;
     border-radius: 12px;
     box-shadow: 0 5px 25px rgba(0,0,0,0.3);
+    display: flex;
     flex-direction: column;
 }
 
@@ -167,11 +168,11 @@ body {
 #save-and-blog-btn .fa-n { color: #03c75a; font-weight: 900; }
 .close-icon-btn { background: none; font-size: 1.8rem; color: #aaa; padding: 0 8px; }
 .editor-main { flex-grow: 1; overflow-y: auto; display: flex; flex-direction: column; }
-#read-mode-content { padding: 1.5rem; }
+#read-mode-content { flex-grow: 1; padding: 1.5rem; overflow-y: auto; }
 #read-title { font-size: 1.8rem; font-weight: bold; margin-bottom: 1rem; color: #333; }
 #read-tags { margin-bottom: 1.5rem; display: flex; gap: 0.5rem; flex-wrap: wrap; }
 #read-tags span { background-color: #eee; color: #555; padding: 0.2rem 0.6rem; border-radius: 15px; font-size: 0.9rem; }
-#read-body { line-height: 1.8; font-size: 1rem; white-space: pre-wrap; color: #333; }
+#read-body { line-height: 1.8; font-size: 1rem; white-space: pre-wrap; color: #333; overflow-y: auto; }
 #write-mode-content { display: flex; flex-direction: column; height: 100%; }
 #popup-title, #popup-content { width: 100%; border: none; outline: none; background: none; font-family: inherit; box-sizing: border-box; color: #333; }
 #popup-title { font-size: 1.8rem; font-weight: bold; padding: 1.5rem; flex-shrink: 0; border-bottom: 1px solid #f0f0f0; }
