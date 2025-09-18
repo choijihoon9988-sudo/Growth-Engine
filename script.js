@@ -54,11 +54,11 @@ document.addEventListener('DOMContentLoaded', function() {
                 label: '월 매출 (단위: 만원)',
                 data: [300, 1000, 2500, 4000, 5900, 5400],
                 backgroundColor: 'rgba(0, 170, 255, 0.2)',
-                borderColor: 'rgba(0, 170, 255, 1)',
+                borderColor: '#00aaff',
                 borderWidth: 2,
                 pointBackgroundColor: '#fff',
-                pointBorderColor: 'rgba(0, 170, 255, 1)',
-                pointHoverBackgroundColor: 'rgba(0, 170, 255, 1)',
+                pointBorderColor: '#00aaff',
+                pointHoverBackgroundColor: '#00aaff',
                 pointHoverBorderColor: '#fff',
                 tension: 0.4
             }]
@@ -73,7 +73,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 plugins: {
                     legend: {
                         labels: {
-                            color: 'var(--text-color)'
+                            color: '#e0e0e0'
                         }
                     },
                     tooltip: {
@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     y: {
                         beginAtZero: true,
                         ticks: {
-                            color: 'var(--text-muted-color)',
+                            color: '#e0e0e0',
                             callback: function(value) {
                                 return value + '만원';
                             }
@@ -97,7 +97,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     },
                     x: {
                         ticks: {
-                            color: 'var(--text-muted-color)'
+                            color: '#e0e0e0'
                         },
                         grid: {
                             color: 'rgba(255, 255, 255, 0.1)'
