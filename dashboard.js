@@ -410,13 +410,52 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    // ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
+    // [수정] '저장 후 블로그로 이동' 버튼 이벤트 리스너 수정
     blogBtn.addEventListener('click', async () => {
+        // 먼저 글을 저장합니다.
         if (await saveWriting()) {
-            const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
+            // 1. 복사할 텍스트를 준비합니다 (제목 + 본문, 줄바꿈 유지).
+            const title = titleInput.value;
+            const content = contentInput.value;
+            // 제목과 본문 사이에 두 번의 줄바꿈을 넣어 단락을 구분합니다.
+            const textToCopy = `${title}\n\n${content}`;
+
+            // 2. 클립보드에 복사합니다.
+            // navigator.clipboard.writeText가 보안 정책(iframe)으로 막힐 수 있어 document.execCommand를 사용합니다.
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textToCopy;
+            // 화면에 보이지 않도록 스타일을 설정합니다.
+            tempTextArea.style.position = 'absolute';
+            tempTextArea.style.left = '-9999px';
+            document.body.appendChild(tempTextArea);
+            
+            tempTextArea.select();
+            tempTextArea.setSelectionRange(0, 99999); // 모바일 기기 호환성
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    console.log('제목과 본문이 클립보드에 복사되었습니다.');
+                } else {
+                     console.error('클립보드 복사에 실패했습니다.');
+                }
+            } catch (err) {
+                console.error('클립보드 복사 중 오류가 발생했습니다.', err);
+            }
+            
+            // 임시로 만든 textarea를 제거합니다.
+            document.body.removeChild(tempTextArea);
+
+            // 3. 요청하신 블로그 주소로 새 탭에서 이동합니다.
+            const blogUrl = "https://blog.naver.com/tenmilli_10";
             window.open(blogUrl, '_blank');
+            
+            // 4. 글쓰기 창을 닫습니다.
             closeEditorModal();
         }
     });
+    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     function listenForWritings() {
         if (!currentUser) return;
