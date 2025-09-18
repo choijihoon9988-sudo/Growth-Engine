@@ -13,7 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let unsubscribeListeners = [];
     let statsChart, sentimentChart;
     
-    // [수정] 모달 관련 DOM 요소 추가
+    // 모달 관련 DOM 요소
     const editorModal = document.getElementById('editor-modal');
     const titleInput = document.getElementById('popup-title');
     const contentInput = document.getElementById('popup-content');
@@ -329,7 +329,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function initReflectionHub() {
         const newWritingBtn = document.getElementById('new-writing-btn');
         newWritingBtn.addEventListener('click', () => {
-            // [수정] 팝업 대신 모달을 표시
             openEditorModal();
         });
         listenForWritings();
@@ -340,18 +339,34 @@ document.addEventListener('DOMContentLoaded', () => {
         titleInput.value = writing ? writing.title : '';
         contentInput.value = writing ? writing.content : '';
         currentWritingId = id;
+        
+        // 버튼 상태 초기화
+        saveBtn.disabled = false;
+        blogBtn.disabled = false;
+        saveBtn.textContent = '저장 후 닫기';
     }
-
+    
     function closeEditorModal() {
         editorModal.style.display = 'none';
         currentWritingId = null;
     }
 
-    // [수정] 글쓰기 창 저장 로직
     async function saveWriting() {
+        const title = titleInput.value.trim();
+        const content = contentInput.value.trim();
+
+        if (!title || !content) {
+            alert('제목과 내용을 모두 입력해야 저장할 수 있어.');
+            return;
+        }
+
+        saveBtn.disabled = true;
+        blogBtn.disabled = true;
+        saveBtn.textContent = '저장 중...';
+
         const dataToSave = {
-            title: titleInput.value,
-            content: contentInput.value,
+            title: title,
+            content: content,
             updatedAt: serverTimestamp()
         };
         const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
@@ -365,17 +380,81 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             closeEditorModal();
         } catch (error) {
-            console.error("글 저장 실패:", error);
+            console.error("Firestore 저장 오류:", error);
+            // [수정] 오류 유형별로 더 상세한 메시지 제공
+            let errorMessage = "글 저장에 실패했어. 다시 시도해줘.";
+            if (error.code === 'permission-denied') {
+                errorMessage = "권한이 없어 글을 저장할 수 없어. Firebase 보안 규칙을 확인해줘.";
+            } else if (error.code === 'unauthenticated') {
+                errorMessage = "로그인 상태가 아니야. 다시 로그인해줘.";
+            }
+            alert(errorMessage);
+            saveBtn.textContent = '저장 실패';
+        } finally {
+            saveBtn.disabled = false;
+            blogBtn.disabled = false;
+            if (saveBtn.textContent === '저장 실패') {
+                // 실패 메시지가 이미 설정되었으면 유지
+            } else {
+                saveBtn.textContent = '저장 후 닫기';
+            }
         }
     }
 
-    // [수정] 저장 버튼 이벤트 리스너
+    // 저장 버튼 이벤트 리스너
     saveBtn.addEventListener('click', saveWriting);
 
     blogBtn.addEventListener('click', async () => {
-        await saveWriting();
-        const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
-        window.open(blogUrl, '_blank');
+        // blogBtn 클릭 시에도 saveWriting 로직을 실행하도록 수정
+        const title = titleInput.value.trim();
+        const content = contentInput.value.trim();
+
+        if (!title || !content) {
+            alert('제목과 내용을 모두 입력해야 블로그로 이동할 수 있어.');
+            return;
+        }
+
+        saveBtn.disabled = true;
+        blogBtn.disabled = true;
+        saveBtn.textContent = '저장 중...';
+        
+        const dataToSave = {
+            title: title,
+            content: content,
+            updatedAt: serverTimestamp()
+        };
+        const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
+        try {
+            if (currentWritingId) {
+                const docRef = doc(collectionRef, currentWritingId);
+                await updateDoc(docRef, dataToSave);
+            } else {
+                dataToSave.createdAt = serverTimestamp();
+                await addDoc(collectionRef, dataToSave);
+            }
+            // 저장 성공 시에만 블로그로 이동
+            const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
+            window.open(blogUrl, '_blank');
+            closeEditorModal();
+        } catch (error) {
+             console.error("Firestore 저장 오류:", error);
+            let errorMessage = "글 저장에 실패했어. 다시 시도해줘.";
+            if (error.code === 'permission-denied') {
+                errorMessage = "권한이 없어 글을 저장할 수 없어. Firebase 보안 규칙을 확인해줘.";
+            } else if (error.code === 'unauthenticated') {
+                errorMessage = "로그인 상태가 아니야. 다시 로그인해줘.";
+            }
+            alert(errorMessage);
+            saveBtn.textContent = '저장 실패';
+        } finally {
+            saveBtn.disabled = false;
+            blogBtn.disabled = false;
+            if (saveBtn.textContent === '저장 실패') {
+                // 실패 메시지가 이미 설정되었으면 유지
+            } else {
+                saveBtn.textContent = '저장 후 닫기';
+            }
+        }
     });
 
     function listenForWritings() {
@@ -402,7 +481,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p class="smart-item-date">${date}</p>
                 `;
                 item.addEventListener('click', () => {
-                    // [수정] 팝업 대신 모달을 표시
                     openEditorModal(writing, id);
                 });
                 listElement.appendChild(item);
