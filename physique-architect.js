@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', function() {
         { name: '시티드 케이블 로우', category: '등' },
         { name: '스쿼트', category: '하체' },
         { name: '레그 프레스', category: '하체' },
-        { name: '레그 익스텐션', category: '하체' },
+        { name: '레그 익텐션', category: '하체' },
         { name: '레그 컬', category: '하체' },
         { name: '런지', category: '하체' },
     ];
@@ -239,7 +239,7 @@ document.addEventListener('DOMContentLoaded', function() {
         Object.keys(weeklyData).sort().forEach(week => {
             labels.push(`Week ${week.split('-')[1]}`);
             const weekLog = weeklyData[week];
-             // [수정] weekLog가 존재하지 않는 경우를 대비한 방어 코드 추가
+            // [수정] weekLog가 존재하지 않는 경우를 대비한 방어 코드 추가
             const avgWeight = weekLog && weekLog.weights.length ? (weekLog.weights.reduce((a, b) => a + b, 0) / weekLog.weights.length).toFixed(1) : null;
             const avgCalories = weekLog && weekLog.calories.length ? Math.round(weekLog.calories.reduce((a, b) => a + b, 0) / weekLog.calories.length) : null;
             weightData.push(avgWeight);

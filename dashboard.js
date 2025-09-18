@@ -254,8 +254,6 @@ document.addEventListener('DOMContentLoaded', () => {
     async function renderPomodoroStats() {
         if (!currentUser) return;
     
-        console.log("📊 renderPomodoroStats 함수 시작");
-    
         const canvas = document.getElementById('pomodoro-stats-chart');
         if (!canvas) {
             console.error("캔버스 요소를 찾을 수 없습니다.");
@@ -273,14 +271,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dayOfWeek = now.getDay();
         const distanceToMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
         const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() - distanceToMonday);
-    
-        // --- ▼▼▼ 디버깅을 위한 로그 추가 ▼▼▼ ---
-        console.log("현재 시간 (로컬):", now.toLocaleString());
-        console.log("조회 기준 '오늘 시작':", startOfToday.toLocaleString());
-        console.log("조회 기준 '이번 주 시작':", startOfWeek.toLocaleString());
-        console.log("조회 기준 '이번 달 시작':", startOfMonth.toLocaleString());
-        // --- ▲▲▲ 디버깅을 위한 로그 추가 ▲▲▲ ---
-    
+        
         const todayQuery = query(collection(db, `users/${currentUser.uid}/pomodoro_logs`), where('completedAt', '>=', startOfToday));
         const weekQuery = query(collection(db, `users/${currentUser.uid}/pomodoro_logs`), where('completedAt', '>=', startOfWeek));
         const monthQuery = query(collection(db, `users/${currentUser.uid}/pomodoro_logs`), where('completedAt', '>=', startOfMonth));
@@ -291,12 +282,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 getDocs(weekQuery),
                 getDocs(monthQuery)
             ]);
-    
-            // --- ▼▼▼ 디버깅을 위한 로그 추가 ▼▼▼ ---
-            console.log(`[결과] 오늘 찾은 세션 수: ${todaySnapshot.size}`);
-            console.log(`[결과] 이번 주 찾은 세션 수: ${weekSnapshot.size}`);
-            console.log(`[결과] 이번 달 찾은 세션 수: ${monthSnapshot.size}`);
-            // --- ▲▲▲ 디버깅을 위한 로그 추가 ▲▲▲ ---
     
             statsChart = new Chart(ctx, {
                 type: 'bar',
@@ -318,10 +303,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     plugins: { legend: { labels: { color: '#e0e0e0' } } }
                 }
             });
-            console.log("✅ 차트 렌더링 성공");
     
         } catch(error) {
-            console.error("❌ 통계 데이터 로딩 또는 차트 렌더링 실패:", error);
+            console.error("통계 데이터 로딩 또는 차트 렌더링 실패:", error);
         }
     }
 
@@ -344,6 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
         saveBtn.disabled = false;
         blogBtn.disabled = false;
         saveBtn.textContent = '저장 후 닫기';
+        blogBtn.textContent = '저장 후 블로그로 이동';
     }
     
     function closeEditorModal() {
@@ -351,18 +336,15 @@ document.addEventListener('DOMContentLoaded', () => {
         currentWritingId = null;
     }
 
+    // [수정] 저장 로직을 하나의 함수로 통합하여 중복 제거 및 안정성 확보
     async function saveWriting() {
         const title = titleInput.value.trim();
         const content = contentInput.value.trim();
 
         if (!title || !content) {
-            alert('제목과 내용을 모두 입력해야 저장할 수 있어.');
-            return;
+            alert('제목과 내용을 모두 입력해야 합니다.');
+            return false; // 저장 실패
         }
-
-        saveBtn.disabled = true;
-        blogBtn.disabled = true;
-        saveBtn.textContent = '저장 중...';
 
         const dataToSave = {
             title: title,
@@ -370,90 +352,76 @@ document.addEventListener('DOMContentLoaded', () => {
             updatedAt: serverTimestamp()
         };
         const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
+
         try {
             if (currentWritingId) {
                 const docRef = doc(collectionRef, currentWritingId);
                 await updateDoc(docRef, dataToSave);
             } else {
                 dataToSave.createdAt = serverTimestamp();
-                await addDoc(collectionRef, dataToSave);
+                const docRef = await addDoc(collectionRef, dataToSave);
+                currentWritingId = docRef.id; // 새 문서 ID 저장
             }
-            closeEditorModal();
+            return true; // 저장 성공
         } catch (error) {
             console.error("Firestore 저장 오류:", error);
-            // [수정] 오류 유형별로 더 상세한 메시지 제공
-            let errorMessage = "글 저장에 실패했어. 다시 시도해줘.";
+            let errorMessage = "글 저장에 실패했습니다. 다시 시도해 주세요.";
             if (error.code === 'permission-denied') {
-                errorMessage = "권한이 없어 글을 저장할 수 없어. Firebase 보안 규칙을 확인해줘.";
+                errorMessage = "권한이 없어 글을 저장할 수 없습니다. Firebase 보안 규칙을 확인해 주세요.";
             } else if (error.code === 'unauthenticated') {
-                errorMessage = "로그인 상태가 아니야. 다시 로그인해줘.";
+                errorMessage = "로그인 상태가 아닙니다. 다시 로그인해 주세요.";
             }
             alert(errorMessage);
-            saveBtn.textContent = '저장 실패';
-        } finally {
-            saveBtn.disabled = false;
-            blogBtn.disabled = false;
-            if (saveBtn.textContent === '저장 실패') {
-                // 실패 메시지가 이미 설정되었으면 유지
-            } else {
-                saveBtn.textContent = '저장 후 닫기';
-            }
+            return false; // 저장 실패
         }
     }
 
-    // 저장 버튼 이벤트 리스너
-    saveBtn.addEventListener('click', saveWriting);
-
-    blogBtn.addEventListener('click', async () => {
-        // blogBtn 클릭 시에도 saveWriting 로직을 실행하도록 수정
-        const title = titleInput.value.trim();
-        const content = contentInput.value.trim();
-
-        if (!title || !content) {
-            alert('제목과 내용을 모두 입력해야 블로그로 이동할 수 있어.');
-            return;
-        }
-
+    // '저장 후 닫기' 버튼 이벤트 리스너
+    saveBtn.addEventListener('click', async () => {
         saveBtn.disabled = true;
         blogBtn.disabled = true;
         saveBtn.textContent = '저장 중...';
+
+        const success = await saveWriting();
+
+        if (success) {
+            closeEditorModal();
+        } else {
+             saveBtn.textContent = '저장 실패';
+        }
         
-        const dataToSave = {
-            title: title,
-            content: content,
-            updatedAt: serverTimestamp()
-        };
-        const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
-        try {
-            if (currentWritingId) {
-                const docRef = doc(collectionRef, currentWritingId);
-                await updateDoc(docRef, dataToSave);
-            } else {
-                dataToSave.createdAt = serverTimestamp();
-                await addDoc(collectionRef, dataToSave);
-            }
-            // 저장 성공 시에만 블로그로 이동
+        // finally 블록 대신 성공/실패에 따라 버튼 상태 복원
+        saveBtn.disabled = false;
+        blogBtn.disabled = false;
+        if(saveBtn.textContent !== '저장 실패') {
+            saveBtn.textContent = '저장 후 닫기';
+        }
+    });
+
+    // '저장 후 블로그로 이동' 버튼 이벤트 리스너
+    blogBtn.addEventListener('click', async () => {
+        saveBtn.disabled = true;
+        blogBtn.disabled = true;
+        blogBtn.textContent = '저장 중...';
+
+        const success = await saveWriting();
+
+        if (success) {
             const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
             window.open(blogUrl, '_blank');
             closeEditorModal();
-        } catch (error) {
-             console.error("Firestore 저장 오류:", error);
-            let errorMessage = "글 저장에 실패했어. 다시 시도해줘.";
-            if (error.code === 'permission-denied') {
-                errorMessage = "권한이 없어 글을 저장할 수 없어. Firebase 보안 규칙을 확인해줘.";
-            } else if (error.code === 'unauthenticated') {
-                errorMessage = "로그인 상태가 아니야. 다시 로그인해줘.";
-            }
-            alert(errorMessage);
-            saveBtn.textContent = '저장 실패';
-        } finally {
-            saveBtn.disabled = false;
-            blogBtn.disabled = false;
-            if (saveBtn.textContent === '저장 실패') {
-                // 실패 메시지가 이미 설정되었으면 유지
-            } else {
-                saveBtn.textContent = '저장 후 닫기';
-            }
+        } else {
+            blogBtn.textContent = '저장 실패';
+        }
+        
+        // finally 블록 대신 성공/실패에 따라 버튼 상태 복원
+        saveBtn.disabled = false;
+        blogBtn.disabled = false;
+        if(blogBtn.textContent !== '저장 실패') {
+           blogBtn.innerHTML = '<i class="fa-solid fa-n"></i>';
+        }
+         if (saveBtn.textContent !== '저장 실패') {
+            saveBtn.textContent = '저장 후 닫기';
         }
     });
 
@@ -475,9 +443,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.dataset.id = id;
                 const date = writing.updatedAt?.toDate().toLocaleString() || '날짜 없음';
                 
+                // [개선] 요약이 있을 경우 함께 표시
+                const summary = writing.summary || (writing.content || '').substring(0, 150) + '...';
+
                 item.innerHTML = `
                     <h3 class="smart-item-title">${writing.title || '무제'}</h3>
-                    <p class="smart-item-summary">${(writing.content || '').substring(0, 150)}...</p>
+                    <p class="smart-item-summary">${summary}</p>
                     <p class="smart-item-date">${date}</p>
                 `;
                 item.addEventListener('click', () => {

@@ -237,14 +237,15 @@ body {
     font-size: 1.2rem;
 }
 
-.workout-card-header.delete-workout-btn {
+/* [수정] 선택자 오류 수정 (하위 선택자로 변경) */
+.workout-card-header .delete-workout-btn {
     background: none;
     border: none;
     color: var(--text-muted-color);
     cursor: pointer;
     font-size: 1rem;
 }
-.workout-card-header.delete-workout-btn:hover {
+.workout-card-header .delete-workout-btn:hover {
     color: #ff4d4d;
 }
 
@@ -273,7 +274,8 @@ body {
     border-radius: 4px;
 }
 
-.sets-container.set-complete-btn {
+/* [수정] 선택자 오류 수정 (하위 선택자로 변경) */
+.sets-container .set-complete-btn {
     padding: 0.5rem 1rem;
     border: 1px solid var(--primary-color);
     background: none;
@@ -282,7 +284,7 @@ body {
     cursor: pointer;
 }
 
-.sets-container.set-complete-btn.completed {
+.sets-container .set-complete-btn.completed {
     background-color: var(--success-color);
     border-color: var(--success-color);
     color: #fff;
