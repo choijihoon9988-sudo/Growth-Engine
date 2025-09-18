@@ -1,67 +1,91 @@
-const functions = require("firebase-functions");
+// choijihoon9988-sudo/growth-engine/Growth-Engine-220b491a5615d95000a9a96bb62dea12046bf863/functions/index.js
+
 const admin = require("firebase-admin");
-const { HttpsError } = require("firebase-functions/v1");
-
-// Google Generative AI SDK import
+const { initializeApp } = require("firebase-admin/app");
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const { logger } = require("firebase-functions");
 
-admin.initializeApp();
-
-// Initialize Gemini AI with API Key from Firebase environment configuration
-// 네가 터미널에서 실행한 `firebase functions:config:set` 명령어로 키가 여기에 설정된다.
-// DEPRECATION NOTICE: 터미널의 경고 메시지처럼, 이 방식은 2026년 3월 이후 지원 중단된다.
-// 나중에는 .env 파일을 사용하는 방식으로 바꿔야 한다.
-let genAI;
-if (functions.config().gemini && functions.config().gemini.key) {
-    genAI = new GoogleGenerativeAI(functions.config().gemini.key);
-} else {
-    console.warn("Gemini API key가 Firebase 환경 변수에 설정되지 않았습니다.");
+try {
+  initializeApp();
+} catch (e) {
+  logger.info("Firebase Admin SDK already initialized.");
 }
 
-exports.recommendWritings = functions.region("asia-northeast3").https.onCall(async (data, context) => {
-    if (!genAI) {
-        throw new HttpsError("failed-precondition", "Gemini AI가 설정되지 않았습니다. API 키를 확인하세요.");
+let genAI;
+
+// ✅ 1. 함수의 secrets 옵션을 사용하여 환경 변수를 안전하게 로드합니다.
+exports.recommendWritings = onCall({ region: "asia-northeast3", secrets: ["GEMINI_KEY"] }, async (request) => {
+    
+    // ✅ 2. 함수 실행 시점에 SDK를 초기화합니다.
+    try {
+        if (!genAI) { // genAI가 초기화되지 않았을 경우에만 초기화
+            const geminiKey = process.env.GEMINI_KEY;
+            if (geminiKey) {
+                genAI = new GoogleGenerativeAI(geminiKey);
+            } else {
+                logger.error("GEMINI_KEY secret이 로드되지 않았습니다.");
+                throw new HttpsError("internal", "API 키 설정에 문제가 발생했습니다.");
+            }
+        }
+    } catch (error) {
+        logger.error("Gemini SDK 초기화 실패:", error);
+        throw new HttpsError("internal", "AI 서비스 초기화에 실패했습니다.");
     }
 
-    if (!context.auth) {
+    if (!request.auth) {
         throw new HttpsError("unauthenticated", "인증된 사용자만 이 기능을 호출할 수 있습니다.");
     }
 
-    const { searchTerm, allWritings } = data;
+    const { searchTerm, allWritings } = request.data;
     if (!searchTerm || !allWritings) {
         throw new HttpsError("invalid-argument", "검색어와 전체 글 목록 데이터가 필요합니다.");
     }
     
-    // Gemini에게 보낼 데이터 양을 줄이기 위해 글 내용을 200자로 요약
     const writingsForPrompt = allWritings.map(w => ({
         id: w.id,
         title: w.title,
-        content: w.content.substring(0, 200)
+        content: w.content ? w.content.substring(0, 200) : ''
     }));
 
     const model = genAI.getGenerativeModel({ model: "gemini-pro" });
 
     const prompt = `
-        당신은 개인 노트 앱의 지능형 검색 어시스턴트입니다.
-        사용자 검색어의 맥락적 의미를 분석해서, 아래의 글 목록 중에서 가장 관련성 높은 글 3개를 추천해주세요.
+        You are an intelligent search assistant for a personal note-taking app.
+        Analyze the contextual meaning of the user's search query and recommend the 3 most relevant writings from the list below.
         
-        사용자 검색어: "${searchTerm}"
+        User's search query: "${searchTerm}"
         
-        글 목록 JSON: ${JSON.stringify(writingsForPrompt)}
+        Writings JSON: ${JSON.stringify(writingsForPrompt)}
 
-        지침:
-        1. 사용자 검색어의 의미를 파악하세요. (예: "글쓰기 힘들다" -> 스트레스, 어려움, 고통)
-        2. 글 목록의 제목과 내용을 보고, 검색어와 의미적으로 가장 유사한 글을 찾으세요.
-        3. 각 추천 글에 대해 "id"와 0에서 100 사이의 "score"(유사도 점수)를 포함하여 응답하세요.
-        4. 반드시 [{"id": "...", "score": ...}] 형식의 JSON 배열만 반환하세요. 다른 설명은 절대 추가하지 마세요.
+        Instructions:
+        1. Understand the user's intent. (e.g., "writing is hard" -> stress, difficulty, pain)
+        2. Find writings with the most semantically similar titles and content.
+        3. Respond with the "id" and a "score" (similarity score from 0 to 100) for each recommendation.
+        4. YOU MUST ONLY return a JSON array in the format of [{"id": "...", "score": ...}]. Do not include any other text or explanations.
     `;
 
     try {
         const result = await model.generateContent(prompt);
         const response = result.response;
-        const jsonResponse = response.text().trim();
         
-        const recommendedIdsWithScores = JSON.parse(jsonResponse);
+        let jsonString = response.text().trim();
+        const jsonMatch = jsonString.match(/\[(.*?)\]/s);
+        
+        if (!jsonMatch) {
+            logger.error("AI 응답에서 유효한 JSON 배열을 찾지 못했습니다. 응답 내용:", jsonString);
+            throw new Error("AI did not return a valid JSON array.");
+        }
+        
+        jsonString = jsonMatch[0];
+        
+        let recommendedIdsWithScores;
+        try {
+            recommendedIdsWithScores = JSON.parse(jsonString);
+        } catch (e) {
+            logger.error("AI 응답 JSON 파싱 실패:", e, "원본 문자열:", jsonString);
+            throw new HttpsError("internal", "AI가 반환한 JSON 형식이 올바르지 않습니다.");
+        }
 
         if (!Array.isArray(recommendedIdsWithScores)) {
              throw new Error("AI 응답이 유효한 JSON 배열이 아닙니다.");
@@ -75,12 +99,10 @@ exports.recommendWritings = functions.region("asia-northeast3").https.onCall(asy
         return { recommendations };
 
     } catch (error) {
-        console.error("AI 추천 생성 오류:", error);
-        if (error instanceof SyntaxError) {
-             console.error("AI 응답 파싱 실패. 응답 내용:", error.message);
-             return { recommendations: [] };
+        logger.error("AI 추천 생성 오류:", error);
+        if (error instanceof HttpsError) {
+            throw error;
         }
-        throw new HttpsError("internal", "AI 추천을 생성하는 데 실패했습니다.");
+        throw new HttpsError("internal", "AI 추천을 생성하는 데 실패했습니다.", error.message);
     }
 });
-

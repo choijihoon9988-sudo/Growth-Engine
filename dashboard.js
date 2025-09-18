@@ -555,75 +555,90 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function listenForWritings() {
-        if (!currentUser) return;
-        if (unsubscribeListeners.writings) unsubscribeListeners.writings();
+    // choijihoon9988-sudo/growth-engine/Growth-Engine-220b491a5615d95000a9a96bb62dea12046bf863/dashboard.js
 
-        const [sortBy, sortDirection] = document.getElementById('sort-options').value.split('-');
-        const searchTerm = document.getElementById('writing-search-input').value.trim().toLowerCase();
+function listenForWritings() {
+    if (!currentUser) return;
+    if (unsubscribeListeners.writings) unsubscribeListeners.writings();
+
+    const [sortBy, sortDirection] = document.getElementById('sort-options').value.split('-');
+    const searchTerm = document.getElementById('writing-search-input').value.trim().toLowerCase();
+    
+    const q = query(collection(db, `users/${currentUser.uid}/writings`), orderBy(sortBy, sortDirection));
+    
+    unsubscribeListeners.writings = onSnapshot(q, (snapshot) => {
+        // ✅ 수정된 부분: Timestamp를 ISO 문자열로 변환
+        const allWritings = snapshot.docs.map(doc => {
+            const data = doc.data();
+            return {
+                id: doc.id,
+                title: data.title,
+                content: data.content,
+                tags: data.tags || [],
+                // Timestamp 객체를 표준 문자열 형식으로 변환하여 직렬화 문제를 방지합니다.
+                createdAt: data.createdAt?.toDate().toISOString(),
+                updatedAt: data.updatedAt?.toDate().toISOString(),
+            };
+        });
         
-        const q = query(collection(db, `users/${currentUser.uid}/writings`), orderBy(sortBy, sortDirection));
-        
-        unsubscribeListeners.writings = onSnapshot(q, (snapshot) => {
-            const allWritings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            
-            const allTags = new Set(allWritings.flatMap(w => w.tags || []));
-            renderTags(allTags);
-            const activeTag = document.querySelector('.tag-filter.active')?.dataset.tag;
-            const tagFilteredWritings = activeTag && activeTag !== 'all'
-                ? allWritings.filter(w => w.tags && w.tags.includes(activeTag))
-                : allWritings;
+        const allTags = new Set(allWritings.flatMap(w => w.tags || []));
+        renderTags(allTags);
+        const activeTag = document.querySelector('.tag-filter.active')?.dataset.tag;
+        const tagFilteredWritings = activeTag && activeTag !== 'all'
+            ? allWritings.filter(w => w.tags && w.tags.includes(activeTag))
+            : allWritings;
 
-            const listElement = document.getElementById('smart-writing-list');
-            const aiContainer = document.getElementById('ai-recommendation-container');
-            const aiListElement = document.getElementById('ai-recommendation-list');
+        const listElement = document.getElementById('smart-writing-list');
+        const aiContainer = document.getElementById('ai-recommendation-container');
+        const aiListElement = document.getElementById('ai-recommendation-list');
 
-            if (!searchTerm) {
-                listElement.style.display = 'flex';
-                aiContainer.style.display = 'none';
-                renderWritingList(tagFilteredWritings, "작성된 글이 없습니다.");
-                return;
-            }
+        if (!searchTerm) {
+            listElement.style.display = 'flex';
+            aiContainer.style.display = 'none';
+            renderWritingList(tagFilteredWritings, "작성된 글이 없습니다.");
+            return;
+        }
 
-            const exactMatches = tagFilteredWritings.filter(w =>
-                (w.title && w.title.toLowerCase().includes(searchTerm)) ||
-                (w.content && w.content.toLowerCase().includes(searchTerm))
-            );
+        const exactMatches = tagFilteredWritings.filter(w =>
+            (w.title && w.title.toLowerCase().includes(searchTerm)) ||
+            (w.content && w.content.toLowerCase().includes(searchTerm))
+        );
 
-            if (exactMatches.length > 0) {
-                listElement.style.display = 'flex';
-                aiContainer.style.display = 'none';
-                renderWritingList(exactMatches, "검색 결과가 없습니다.");
-            } else {
-                listElement.style.display = 'none';
-                aiContainer.style.display = 'block';
-                aiListElement.innerHTML = `<p class="empty-list-message">AI가 유사한 글을 찾고 있습니다...</p>`;
+        if (exactMatches.length > 0) {
+            listElement.style.display = 'flex';
+            aiContainer.style.display = 'none';
+            renderWritingList(exactMatches, "검색 결과가 없습니다.");
+        } else {
+            listElement.style.display = 'none';
+            aiContainer.style.display = 'block';
+            aiListElement.innerHTML = `<p class="empty-list-message">AI가 유사한 글을 찾고 있습니다...</p>`;
 
-                const recommendWritings = httpsCallable(functions, 'recommendWritings');
-                recommendWritings({ searchTerm, allWritings: tagFilteredWritings })
-                    .then(result => {
-                        const { recommendations } = result.data;
-                        if (recommendations && recommendations.length > 0) {
-                            aiListElement.innerHTML = '';
-                            recommendations.forEach(writing => {
-                                aiListElement.appendChild(createWritingElement(writing));
-                            });
-                        } else {
-                            aiContainer.style.display = 'none';
-                            listElement.style.display = 'flex';
-                            renderWritingList([], "AI가 추천할 만한 유사한 글을 찾지 못했습니다.");
-                        }
-                    })
-                    .catch(error => {
-                        console.error("AI 추천 오류:", error);
+            const recommendWritings = httpsCallable(functions, 'recommendWritings');
+            // 이제 allWritings는 JSON으로 변환하기 안전한 데이터만 포함합니다.
+            recommendWritings({ searchTerm, allWritings: tagFilteredWritings })
+                .then(result => {
+                    const { recommendations } = result.data;
+                    if (recommendations && recommendations.length > 0) {
+                        aiListElement.innerHTML = '';
+                        recommendations.forEach(writing => {
+                            aiListElement.appendChild(createWritingElement(writing));
+                        });
+                    } else {
                         aiContainer.style.display = 'none';
                         listElement.style.display = 'flex';
-                        renderWritingList([], "AI 추천 기능을 불러오는 데 실패했습니다.");
-                    });
-            }
+                        renderWritingList([], "AI가 추천할 만한 유사한 글을 찾지 못했습니다.");
+                    }
+                })
+                .catch(error => {
+                    console.error("AI 추천 오류:", error);
+                    aiContainer.style.display = 'none';
+                    listElement.style.display = 'flex';
+                    renderWritingList([], "AI 추천 기능을 불러오는 데 실패했습니다.");
+                });
+        }
 
-        }, (error) => console.error("글 목록 수신 오류:", error));
-    }
+    }, (error) => console.error("글 목록 수신 오류:", error));
+}
 
     function renderTags(tags) {
         const tagContainer = document.getElementById('tag-filter-container');
