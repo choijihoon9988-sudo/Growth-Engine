@@ -1,9 +1,8 @@
-// choijihoon9988-sudo/growth-engine/Growth-Engine-5abdd40852fe5bbd387120a5ee7089d50061a9cf/dashboard.js
+// choijihoon9988-sudo/growth-engine/Growth-Engine-9c1b7c12497c65edb01f6158d937d9a112a0e686/dashboard.js
 
-// [수정] firebase-config.js 내용을 통합하고, SDK import를 한 곳에서 관리
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
-import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, query, orderBy, serverTimestamp, onSnapshot, where, Timestamp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
+import { getFirestore, collection, doc, addDoc, updateDoc, deleteDoc, getDoc, getDocs, query, orderBy, serverTimestamp, onSnapshot, where } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-firestore.js";
 import { getFunctions, httpsCallable } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-functions.js";
 
 
@@ -12,7 +11,7 @@ const firebaseConfig = {
     apiKey: "AIzaSyDJJLSOPg-nExI-nISWbS-NPwIPsiO3-VI",
     authDomain: "growth-engine-9c6ab.firebaseapp.com",
     projectId: "growth-engine-9c6ab",
-    storageBucket: "growth-engine-9c6ab.appspot.com", // [수정] .firebasestorage.app -> .appspot.com
+    storageBucket: "growth-engine-9c6ab.appspot.com",
     messagingSenderId: "90122365916",
     appId: "1:90122365916:web:a41acfdac4699bcd067d19",
     measurementId: "G-T8JC3C73RM"
@@ -22,7 +21,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
-const functions = getFunctions(app, "asia-northeast3"); // [수정] Cloud Functions 리전 명시
+const functions = getFunctions(app, "asia-northeast3");
 
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -50,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const readModeContent = document.getElementById('read-mode-content');
     const writeModeContent = document.getElementById('write-mode-content');
     let currentWritingId = null;
-    let currentDraftId = null; // 현재 편집이 시작된 임시저장 문서의 ID
+    let currentDraftId = null;
     let isEditMode = false;
     let originalContentForDraftCheck = { title: '', content: '' };
 
@@ -124,7 +123,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.classList.add('active');
                 
                 const tabName = item.getAttribute('data-tab');
-                // ID를 정확히 찾도록 수정
                 const targetId = (tabName === 'focus') ? 'focus-zone' : `${tabName}-hub`;
                 const targetTab = document.getElementById(targetId);
                 if (targetTab) {
@@ -331,7 +329,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function initReflectionHub() {
         document.getElementById('new-writing-btn').addEventListener('click', () => openEditorModal(null, null, true));
         
-        // 휴지통 모달 이벤트
         const trashModal = document.getElementById('trash-modal');
         document.getElementById('open-trash-btn').addEventListener('click', () => {
             trashModal.style.display = 'flex';
@@ -339,7 +336,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('close-trash-btn').addEventListener('click', () => trashModal.style.display = 'none');
         
-        // 임시저장 모달 이벤트
         const draftsModal = document.getElementById('drafts-modal');
         document.getElementById('open-drafts-btn').addEventListener('click', () => {
             draftsModal.style.display = 'flex';
@@ -347,7 +343,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('close-drafts-btn').addEventListener('click', () => draftsModal.style.display = 'none');
         
-        // 모달 외부 클릭 시 닫기
         window.addEventListener('click', (e) => { 
             if (e.target === trashModal) trashModal.style.display = 'none'; 
             if (e.target === draftsModal) draftsModal.style.display = 'none';
@@ -356,7 +351,6 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sort-options').addEventListener('change', listenForWritings);
         document.getElementById('writing-search-input').addEventListener('input', listenForWritings);
 
-        // 글쓰기/보기 모달 버튼 이벤트
         editBtn.addEventListener('click', () => setModalMode(true));
         cancelBtn.addEventListener('click', () => handleCloseAttempt(true));
         closeModalBtn.addEventListener('click', () => handleCloseAttempt(false));
@@ -367,7 +361,7 @@ document.addEventListener('DOMContentLoaded', () => {
         blogBtn.addEventListener('click', async () => {
             let success = true;
             if (isEditMode) {
-                success = await saveWriting(); // 수정 모드일 경우 먼저 저장 시도
+                success = await saveWriting();
             }
             if(success) {
                 const contentToCopy = `${document.getElementById('read-title').textContent}\n\n${document.getElementById('read-body').innerText}`;
@@ -403,7 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 currentWritingId = writing.originalWritingId;
             }
 
-        } else { // 새 글
+        } else {
             titleInput.value = '';
             contentInput.value = '';
             document.getElementById('read-title').textContent = '';
@@ -481,7 +475,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             await addDoc(collection(db, `users/${currentUser.uid}/drafts`), {
-                originalWritingId: currentWritingId, // 새 글일 경우 null
+                originalWritingId: currentWritingId,
                 title,
                 content,
                 savedAt: serverTimestamp()
@@ -498,7 +492,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
     async function saveWriting() {
-        if (!isEditMode) return true; // 수정 모드가 아니면 저장할 필요 없음
+        if (!isEditMode) return true;
         
         saveBtn.disabled = true;
         saveBtn.textContent = '저장 중...';
@@ -554,91 +548,98 @@ document.addEventListener('DOMContentLoaded', () => {
             return success;
         }
     }
-
-    // choijihoon9988-sudo/growth-engine/Growth-Engine-220b491a5615d95000a9a96bb62dea12046bf863/dashboard.js
-
-function listenForWritings() {
-    if (!currentUser) return;
-    if (unsubscribeListeners.writings) unsubscribeListeners.writings();
-
-    const [sortBy, sortDirection] = document.getElementById('sort-options').value.split('-');
-    const searchTerm = document.getElementById('writing-search-input').value.trim().toLowerCase();
     
-    const q = query(collection(db, `users/${currentUser.uid}/writings`), orderBy(sortBy, sortDirection));
-    
-    unsubscribeListeners.writings = onSnapshot(q, (snapshot) => {
-        // ✅ 수정된 부분: Timestamp를 ISO 문자열로 변환
-        const allWritings = snapshot.docs.map(doc => {
-            const data = doc.data();
-            return {
-                id: doc.id,
-                title: data.title,
-                content: data.content,
-                tags: data.tags || [],
-                // Timestamp 객체를 표준 문자열 형식으로 변환하여 직렬화 문제를 방지합니다.
-                createdAt: data.createdAt?.toDate().toISOString(),
-                updatedAt: data.updatedAt?.toDate().toISOString(),
-            };
-        });
+    // ✅ *** 중복 정의 문제를 해결하고 AI 검색과 기본 목록 표시 기능을 통합한 최종 버전 ***
+    function listenForWritings() {
+        if (!currentUser) return;
+        if (unsubscribeListeners.writings) unsubscribeListeners.writings();
+
+        const [sortBy, sortDirection] = document.getElementById('sort-options').value.split('-');
+        const searchTerm = document.getElementById('writing-search-input').value.trim().toLowerCase();
         
-        const allTags = new Set(allWritings.flatMap(w => w.tags || []));
-        renderTags(allTags);
-        const activeTag = document.querySelector('.tag-filter.active')?.dataset.tag;
-        const tagFilteredWritings = activeTag && activeTag !== 'all'
-            ? allWritings.filter(w => w.tags && w.tags.includes(activeTag))
-            : allWritings;
+        const q = query(collection(db, `users/${currentUser.uid}/writings`), orderBy(sortBy, sortDirection));
+        
+        unsubscribeListeners.writings = onSnapshot(q, (snapshot) => {
+            // Firestore의 Timestamp 객체를 AI 함수로 보내기 전에 직렬화 가능한 ISO 문자열로 변환
+            const allWritings = snapshot.docs.map(doc => {
+                const data = doc.data();
+                return {
+                    id: doc.id,
+                    title: data.title,
+                    content: data.content,
+                    tags: data.tags || [],
+                    createdAt: data.createdAt?.toDate().toISOString(),
+                    updatedAt: data.updatedAt?.toDate().toISOString(),
+                };
+            });
+            
+            const allTags = new Set(allWritings.flatMap(w => w.tags || []));
+            renderTags(allTags);
+            const activeTag = document.querySelector('.tag-filter.active')?.dataset.tag;
+            const tagFilteredWritings = activeTag && activeTag !== 'all'
+                ? allWritings.filter(w => w.tags && w.tags.includes(activeTag))
+                : allWritings;
 
-        const listElement = document.getElementById('smart-writing-list');
-        const aiContainer = document.getElementById('ai-recommendation-container');
-        const aiListElement = document.getElementById('ai-recommendation-list');
+            const listElement = document.getElementById('smart-writing-list');
+            const aiContainer = document.getElementById('ai-recommendation-container');
+            const aiListElement = document.getElementById('ai-recommendation-list');
 
-        if (!searchTerm) {
-            listElement.style.display = 'flex';
-            aiContainer.style.display = 'none';
-            renderWritingList(tagFilteredWritings, "작성된 글이 없습니다.");
-            return;
-        }
+            // 검색어가 없을 경우, 필터링된 전체 글 목록을 보여줌
+            if (!searchTerm) {
+                listElement.style.display = 'flex';
+                aiContainer.style.display = 'none';
+                renderWritingList(tagFilteredWritings, "작성된 글이 없습니다.");
+                return; // 여기서 함수 실행 종료
+            }
 
-        const exactMatches = tagFilteredWritings.filter(w =>
-            (w.title && w.title.toLowerCase().includes(searchTerm)) ||
-            (w.content && w.content.toLowerCase().includes(searchTerm))
-        );
+            // 검색어가 있을 경우, 먼저 정확히 일치하는 결과를 찾음
+            const exactMatches = tagFilteredWritings.filter(w =>
+                (w.title && w.title.toLowerCase().includes(searchTerm)) ||
+                (w.content && w.content.toLowerCase().includes(searchTerm))
+            );
 
-        if (exactMatches.length > 0) {
-            listElement.style.display = 'flex';
-            aiContainer.style.display = 'none';
-            renderWritingList(exactMatches, "검색 결과가 없습니다.");
-        } else {
-            listElement.style.display = 'none';
-            aiContainer.style.display = 'block';
-            aiListElement.innerHTML = `<p class="empty-list-message">AI가 유사한 글을 찾고 있습니다...</p>`;
+            if (exactMatches.length > 0) {
+                listElement.style.display = 'flex';
+                aiContainer.style.display = 'none';
+                renderWritingList(exactMatches, "검색 결과가 없습니다.");
+            } else {
+                // 정확히 일치하는 결과가 없으면 AI 추천 기능 호출
+                listElement.style.display = 'none';
+                aiContainer.style.display = 'block';
+                aiListElement.innerHTML = `<p class="empty-list-message">AI가 유사한 글을 찾고 있습니다...</p>`;
 
-            const recommendWritings = httpsCallable(functions, 'recommendWritings');
-            // 이제 allWritings는 JSON으로 변환하기 안전한 데이터만 포함합니다.
-            recommendWritings({ searchTerm, allWritings: tagFilteredWritings })
-                .then(result => {
-                    const { recommendations } = result.data;
-                    if (recommendations && recommendations.length > 0) {
-                        aiListElement.innerHTML = '';
-                        recommendations.forEach(writing => {
-                            aiListElement.appendChild(createWritingElement(writing));
-                        });
-                    } else {
+                const recommendWritings = httpsCallable(functions, 'recommendWritings');
+                recommendWritings({ searchTerm, allWritings: tagFilteredWritings })
+                    .then(result => {
+                        const { recommendations } = result.data;
+                        if (recommendations && recommendations.length > 0) {
+                            aiListElement.innerHTML = '';
+                            recommendations.forEach(writing => {
+                                // AI 추천 결과의 날짜는 문자열이므로 Date 객체로 변환하여 createWritingElement에 전달
+                                const formattedWriting = {
+                                    ...writing,
+                                    createdAt: writing.createdAt ? new Date(writing.createdAt) : null,
+                                    updatedAt: writing.updatedAt ? new Date(writing.updatedAt) : null,
+                                }
+                                aiListElement.appendChild(createWritingElement(formattedWriting));
+                            });
+                        } else {
+                            aiContainer.style.display = 'none';
+                            listElement.style.display = 'flex';
+                            renderWritingList([], "AI가 추천할 만한 유사한 글을 찾지 못했습니다.");
+                        }
+                    })
+                    .catch(error => {
+                        console.error("AI 추천 오류:", error);
                         aiContainer.style.display = 'none';
                         listElement.style.display = 'flex';
-                        renderWritingList([], "AI가 추천할 만한 유사한 글을 찾지 못했습니다.");
-                    }
-                })
-                .catch(error => {
-                    console.error("AI 추천 오류:", error);
-                    aiContainer.style.display = 'none';
-                    listElement.style.display = 'flex';
-                    renderWritingList([], "AI 추천 기능을 불러오는 데 실패했습니다.");
-                });
-        }
+                        renderWritingList([], "AI 추천 기능을 불러오는 데 실패했습니다.");
+                    });
+            }
 
-    }, (error) => console.error("글 목록 수신 오류:", error));
-}
+        }, (error) => console.error("글 목록 수신 오류:", error));
+    }
+
 
     function renderTags(tags) {
         const tagContainer = document.getElementById('tag-filter-container');
@@ -677,7 +678,14 @@ function listenForWritings() {
         }
 
         writings.forEach(writing => {
-            listElement.appendChild(createWritingElement(writing));
+            // Firestore에서 직접 온 데이터와 AI 추천 데이터를 모두 처리하기 위해 Date 객체로 변환
+            const formattedWriting = {
+                ...writing,
+                createdAt: writing.createdAt ? new Date(writing.createdAt) : null,
+                updatedAt: writing.updatedAt ? new Date(writing.updatedAt) : null,
+            };
+            listElement.appendChild(createWritingElement(formattedWriting));
+            
             const option = document.createElement('option');
             option.value = writing.id;
             option.textContent = writing.title || '무제';
@@ -690,15 +698,16 @@ function listenForWritings() {
         item.classList.add('smart-item');
         item.dataset.id = writing.id;
 
-        const updatedDate = writing.updatedAt?.toDate().toLocaleString() || '날짜 없음';
-        const createdDate = writing.createdAt?.toDate().toLocaleString() || '날짜 없음';
+        // Date 객체인지 확인 후 toLocaleString() 호출
+        const updatedDate = writing.updatedAt instanceof Date ? writing.updatedAt.toLocaleString() : '날짜 없음';
+        const createdDate = writing.createdAt instanceof Date ? writing.createdAt.toLocaleString() : '날짜 없음';
         
         const tagsHtml = (writing.tags && Array.isArray(writing.tags))
             ? `<div class="item-tags">${writing.tags.map(tag => `<span>#${tag}</span>`).join(' ')}</div>`
             : '';
 
         const dateOrScoreHtml = writing.score
-            ? `<span class="ai-score">AI 추천: 유사도 ${writing.score}%</span>`
+            ? `<span class="ai-score" style="color: var(--warning-color);">AI 추천: 유사도 ${writing.score}%</span>`
             : `<span>수정: ${updatedDate}</span><span>게시: ${createdDate}</span>`;
         
         item.innerHTML = `
@@ -713,7 +722,13 @@ function listenForWritings() {
         
         item.addEventListener('click', e => { 
             if (!e.target.closest('.delete-writing-btn')) {
-                openEditorModal(writing, writing.id, false);
+                 // Firestore에서 원본 데이터를 다시 가져와서 모달에 전달
+                getDoc(doc(db, `users/${currentUser.uid}/writings`, writing.id))
+                    .then(docSnap => {
+                        if (docSnap.exists()) {
+                            openEditorModal(docSnap.data(), docSnap.id, false);
+                        }
+                    });
             }
         });
         const deleteBtn = item.querySelector('.delete-writing-btn');
@@ -782,7 +797,6 @@ function listenForWritings() {
         });
     }
     
-    // --- 임시저장 관련 함수 ---
     function listenForDrafts() {
         if (!currentUser) return;
         if (unsubscribeListeners.drafts) unsubscribeListeners.drafts();
@@ -939,4 +953,3 @@ function listenForWritings() {
         document.getElementById('category-result').textContent = '카테고리 분석 결과 없음';
     }
 });
-
