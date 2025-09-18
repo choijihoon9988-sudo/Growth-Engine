@@ -28,7 +28,11 @@ const functions = getFunctions(app, "asia-northeast3"); // [수정] Cloud Functi
 document.addEventListener('DOMContentLoaded', () => {
     // 전역 변수 선언
     let currentUser = null;
-    let unsubscribeListeners = [];
+    let unsubscribeListeners = {
+        todos: null,
+        writings: null,
+        trash: null
+    };
     let statsChart, sentimentChart;
     
     // 모달 관련 DOM 요소
@@ -37,7 +41,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const contentInput = document.getElementById('popup-content');
     const saveBtn = document.getElementById('save-and-close-btn');
     const blogBtn = document.getElementById('save-and-blog-btn');
+    const editBtn = document.getElementById('edit-writing-btn');
+    const cancelBtn = document.getElementById('cancel-edit-btn');
+    const modalTitleEl = document.getElementById('modal-title');
+    const readModeContent = document.getElementById('read-mode-content');
+    const writeModeContent = document.getElementById('write-mode-content');
     let currentWritingId = null;
+    let isEditMode = false;
+
 
     // DOM 요소 캐싱
     const loginScreen = document.getElementById('login-screen');
@@ -89,8 +100,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function cleanupListeners() {
-        unsubscribeListeners.forEach(unsub => unsub());
-        unsubscribeListeners = [];
+        Object.values(unsubscribeListeners).forEach(unsub => {
+            if (unsub) unsub();
+        });
     }
 
     // --- 탭 기능 초기화 ---
@@ -107,15 +119,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.classList.add('active');
                 
                 const tabName = item.getAttribute('data-tab');
-                let targetId;
-                if (tabName === 'focus') {
-                    targetId = 'focus-zone';
-                } else if (tabName === 'reflection') {
-                    targetId = 'reflection-hub';
-                } else if (tabName === 'analytics') {
-                    targetId = 'analytics-hub';
-                }
-
+                const targetId = `${tabName}-zone` in document.body.children ? `${tabName}-zone` : `${tabName}-hub`;
                 const targetTab = document.getElementById(targetId);
                 if (targetTab) {
                     targetTab.classList.add('active');
@@ -123,6 +127,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (targetId === 'focus-zone') {
                     renderPomodoroStats();
+                } else if (targetId === 'analytics-hub') {
+                    // Analytics Hub가 활성화될 때 차트를 다시 렌더링해야 할 경우 여기에 로직 추가
                 }
             });
         });
@@ -229,18 +235,18 @@ document.addEventListener('DOMContentLoaded', () => {
     
     function listenForTodos() {
         if (!currentUser) return;
+        if (unsubscribeListeners.todos) unsubscribeListeners.todos();
+
         const q = query(collection(db, `users/${currentUser.uid}/todos`), orderBy('createdAt', 'desc'));
         
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        unsubscribeListeners.todos = onSnapshot(q, (snapshot) => {
             const todoList = document.getElementById('todo-list');
             todoList.innerHTML = '';
             snapshot.docs.forEach(docSnapshot => {
                 const todo = docSnapshot.data();
                 const li = document.createElement('li');
                 li.dataset.id = docSnapshot.id;
-                if (todo.completed) {
-                    li.classList.add('completed');
-                }
+                if (todo.completed) li.classList.add('completed');
 
                 const checkbox = document.createElement('input');
                 checkbox.type = 'checkbox';
@@ -265,24 +271,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 li.appendChild(deleteBtn);
                 todoList.appendChild(li);
             });
-        }, (error) => {
-            console.error("Todo 수신 오류:", error);
-        });
-        unsubscribeListeners.push(unsubscribe);
+        }, (error) => console.error("Todo 수신 오류:", error));
     }
     
     async function renderPomodoroStats() {
         if (!currentUser) return;
     
         const canvas = document.getElementById('pomodoro-stats-chart');
-        if (!canvas) {
-            return;
-        }
+        if (!canvas) return;
         const ctx = canvas.getContext('2d');
     
-        if (statsChart) {
-            statsChart.destroy();
-        }
+        if (statsChart) statsChart.destroy();
     
         const now = new Date();
         const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
@@ -296,11 +295,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const monthQuery = query(collection(db, `users/${currentUser.uid}/pomodoro_logs`), where('completedAt', '>=', startOfMonth));
         
         try {
-            const [todaySnapshot, weekSnapshot, monthSnapshot] = await Promise.all([
-                getDocs(todayQuery),
-                getDocs(weekQuery),
-                getDocs(monthQuery)
-            ]);
+            const [todaySnapshot, weekSnapshot, monthSnapshot] = await Promise.all([getDocs(todayQuery), getDocs(weekQuery), getDocs(monthQuery)]);
     
             statsChart = new Chart(ctx, {
                 type: 'bar',
@@ -330,213 +325,245 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- REFLECTION HUB 기능 ---
     function initReflectionHub() {
-        const newWritingBtn = document.getElementById('new-writing-btn');
-        const openTrashBtn = document.getElementById('open-trash-btn');
-        const closeTrashBtn = document.getElementById('close-trash-btn');
-        const trashModal = document.getElementById('trash-modal');
-
-        newWritingBtn.addEventListener('click', () => {
-            openEditorModal();
+        document.getElementById('new-writing-btn').addEventListener('click', () => openEditorModal(null, null, true));
+        document.getElementById('open-trash-btn').addEventListener('click', () => {
+            document.getElementById('trash-modal').style.display = 'flex';
+            listenForTrashItems();
         });
+        document.getElementById('close-trash-btn').addEventListener('click', () => document.getElementById('trash-modal').style.display = 'none');
+        window.addEventListener('click', (e) => { if (e.target.id === 'trash-modal') e.target.style.display = 'none'; });
+        
+        document.getElementById('sort-options').addEventListener('change', listenForWritings);
+        document.getElementById('writing-search-input').addEventListener('input', listenForWritings);
 
-        openTrashBtn.addEventListener('click', () => {
-            trashModal.style.display = 'flex';
-        });
-
-        closeTrashBtn.addEventListener('click', () => {
-            trashModal.style.display = 'none';
-        });
-
-        window.addEventListener('click', (e) => {
-            if (e.target === trashModal) {
-                trashModal.style.display = 'none';
+        editBtn.addEventListener('click', () => setModalMode(true));
+        cancelBtn.addEventListener('click', () => {
+            if (currentWritingId) {
+                setModalMode(false);
+            } else {
+                closeEditorModal();
             }
+        });
+        saveBtn.addEventListener('click', () => saveWriting());
+
+        blogBtn.addEventListener('click', () => {
+            const contentToCopy = isEditMode 
+                ? `${titleInput.value}\n\n${contentInput.value}` 
+                : `${document.getElementById('read-title').textContent}\n\n${document.getElementById('read-body').innerText}`;
+            
+            navigator.clipboard.writeText(contentToCopy).then(() => {
+                alert('제목과 본문이 클립보드에 복사되었습니다.');
+                window.open("https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10", '_blank');
+            }).catch(err => console.error('클립보드 복사 실패:', err));
         });
 
         listenForWritings();
-        listenForTrashItems();
     }
 
-    function openEditorModal(writing = null, id = null) {
-        editorModal.style.display = 'block';
-        titleInput.value = writing ? writing.title : '';
-        contentInput.value = writing ? writing.content : '';
+    function openEditorModal(writing = null, id = null, startInEditMode = false) {
         currentWritingId = id;
+    
+        if (writing) {
+            document.getElementById('read-title').textContent = writing.title || '';
+            document.getElementById('read-body').innerHTML = (writing.content || '').replace(/\n/g, '<br>');
+            const readTagsContainer = document.getElementById('read-tags');
+            readTagsContainer.innerHTML = '';
+            if (writing.tags && Array.isArray(writing.tags)) {
+                writing.tags.forEach(tag => {
+                    const tagEl = document.createElement('span');
+                    tagEl.textContent = `#${tag}`;
+                    readTagsContainer.appendChild(tagEl);
+                });
+            }
+            titleInput.value = writing.title || '';
+            contentInput.value = writing.content || '';
+        } else {
+            titleInput.value = '';
+            contentInput.value = '';
+            document.getElementById('read-title').textContent = '';
+            document.getElementById('read-body').innerHTML = '';
+            document.getElementById('read-tags').innerHTML = '';
+        }
+        
+        setModalMode(startInEditMode);
+        editorModal.style.display = 'block';
+    }
+
+    function setModalMode(edit) {
+        isEditMode = edit;
+        readModeContent.style.display = edit ? 'none' : 'block';
+        writeModeContent.style.display = edit ? 'block' : 'none';
+        
+        editBtn.style.display = edit ? 'none' : (currentWritingId ? 'block' : 'none');
+        saveBtn.style.display = edit ? 'block' : 'none';
+        cancelBtn.style.display = edit ? 'block' : 'none';
+
+        modalTitleEl.textContent = edit ? (currentWritingId ? '글 수정' : '새 글쓰기') : '글 보기';
     }
     
     function closeEditorModal() {
         editorModal.style.display = 'none';
         currentWritingId = null;
+        isEditMode = false;
     }
 
-    // [수정 완료] saveWriting 함수 부분
     async function saveWriting() {
-        // 버튼 비활성화
         saveBtn.disabled = true;
-        blogBtn.disabled = true;
         saveBtn.textContent = '저장 중...';
-
+        
         try {
             const title = titleInput.value.trim();
             const content = contentInput.value.trim();
-
-            if (!title || !content) {
-                alert('제목과 내용을 모두 입력해야 합니다.');
-                return false; // 저장 실패
+            if (!title) {
+                alert('제목을 입력해야 합니다.');
+                return;
             }
-
-            const dataToSave = {
-                title: title,
-                content: content,
-                updatedAt: serverTimestamp()
-            };
+            const tags = content.match(/#([a-zA-Z0-9ㄱ-ㅎ|ㅏ-ㅣ|가-힣]+)/g)?.map(tag => tag.substring(1)) || [];
+            const dataToSave = { title, content, tags, updatedAt: serverTimestamp() };
             const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
 
             if (currentWritingId) {
-                const docRef = doc(collectionRef, currentWritingId);
-                await updateDoc(docRef, dataToSave);
+                await updateDoc(doc(collectionRef, currentWritingId), dataToSave);
             } else {
                 dataToSave.createdAt = serverTimestamp();
-                const docRef = await addDoc(collectionRef, dataToSave);
-                currentWritingId = docRef.id;
+                const newDocRef = await addDoc(collectionRef, dataToSave);
+                currentWritingId = newDocRef.id;
             }
-            return true; // 저장 성공
+
+            const docRef = doc(collectionRef, currentWritingId);
+            const docSnap = await getDoc(docRef);
+            if (docSnap.exists()) {
+                openEditorModal(docSnap.data(), currentWritingId, false);
+            } else {
+                closeEditorModal();
+            }
 
         } catch (error) {
-            console.error("Firestore 저장 오류:", error);
-            // [개선] 더 상세한 오류 메시지를 사용자에게 보여줌
-            let errorMessage = `글 저장에 실패했습니다. (오류: ${error.code || '알 수 없음'})`;
-            if (error.code === 'permission-denied') {
-                errorMessage = "권한이 없어 글을 저장할 수 없습니다. Firebase 보안 규칙을 확인해 주세요.";
-            } else if (error.code === 'unauthenticated') {
-                errorMessage = "로그인 상태가 아닙니다. 다시 로그인해 주세요.";
-            } else if (error.message.includes('400')) {
-                errorMessage = "잘못된 요청입니다. Firestore 데이터베이스가 활성화되었는지 확인해주세요.";
-            }
-            alert(errorMessage);
-            return false; // 저장 실패
+            console.error("글 저장 오류:", error);
+            alert(`글 저장에 실패했습니다: ${error.message}`);
         } finally {
-            // [수정] 성공/실패 여부와 관계없이 버튼 상태를 항상 원래대로 복구
             saveBtn.disabled = false;
-            blogBtn.disabled = false;
-            saveBtn.textContent = '저장 후 닫기';
-            blogBtn.innerHTML = '<i class="fa-solid fa-n"></i>'; // 아이콘으로 복구
+            saveBtn.textContent = '저장';
         }
     }
 
-    saveBtn.addEventListener('click', async () => {
-        if (await saveWriting()) {
-            closeEditorModal();
-        }
-    });
-
-    blogBtn.addEventListener('click', async () => {
-        if (await saveWriting()) {
-            const title = titleInput.value;
-            const content = contentInput.value;
-            const textToCopy = `${title}\n\n${content}`;
-
-            const tempTextArea = document.createElement('textarea');
-            tempTextArea.value = textToCopy;
-            tempTextArea.style.position = 'absolute';
-            tempTextArea.style.left = '-9999px';
-            document.body.appendChild(tempTextArea);
-            
-            tempTextArea.select();
-            tempTextArea.setSelectionRange(0, 99999); 
-
-            try {
-                const successful = document.execCommand('copy');
-                if (successful) {
-                    console.log('제목과 본문이 클립보드에 복사되었습니다.');
-                } else {
-                     console.error('클립보드 복사에 실패했습니다.');
-                }
-            } catch (err) {
-                console.error('클립보드 복사 중 오류가 발생했습니다.', err);
-            }
-            
-            document.body.removeChild(tempTextArea);
-
-            const blogUrl = "https://blog.naver.com/tenmilli_10";
-            window.open(blogUrl, '_blank');
-            
-            closeEditorModal();
-        }
-    });
-
     function listenForWritings() {
         if (!currentUser) return;
-        const q = query(collection(db, `users/${currentUser.uid}/writings`), orderBy('updatedAt', 'desc'));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const listElement = document.getElementById('smart-writing-list');
-            const selectElement = document.getElementById('analytics-writing-select');
+        if (unsubscribeListeners.writings) unsubscribeListeners.writings();
 
-            listElement.innerHTML = '';
-            selectElement.innerHTML = '<option value="">분석할 글을 선택하세요</option>';
+        const [sortBy, sortDirection] = document.getElementById('sort-options').value.split('-');
+        const searchTerm = document.getElementById('writing-search-input').value.toLowerCase();
+        
+        const q = query(collection(db, `users/${currentUser.uid}/writings`), orderBy(sortBy, sortDirection));
+        
+        unsubscribeListeners.writings = onSnapshot(q, (snapshot) => {
+            const allWritings = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            
+            const filteredWritings = allWritings.filter(writing => 
+                !searchTerm ||
+                (writing.title && writing.title.toLowerCase().includes(searchTerm)) ||
+                (writing.content && writing.content.toLowerCase().includes(searchTerm))
+            );
 
-            snapshot.forEach(docSnapshot => {
-                const writing = docSnapshot.data();
-                const id = docSnapshot.id;
-                const item = document.createElement('div');
-                item.classList.add('smart-item');
-                item.dataset.id = id;
-                const date = writing.updatedAt?.toDate().toLocaleString() || '날짜 없음';
-                
-                const summary = writing.summary || (writing.content || '').substring(0, 150) + '...';
+            const allTags = new Set(allWritings.flatMap(w => w.tags || []));
+            renderTags(allTags);
 
-                item.innerHTML = `
-                    <h3 class="smart-item-title">${writing.title || '무제'}</h3>
-                    <p class="smart-item-summary">${summary}</p>
-                    <p class="smart-item-date">${date}</p>
-                    <button class="delete-writing-btn" title="휴지통으로 이동"><i class="fas fa-trash"></i></button>
-                `;
-                
-                // 글 수정 이벤트 리스너
-                item.addEventListener('click', () => {
-                    openEditorModal(writing, id);
-                });
+            const activeTag = document.querySelector('.tag-filter.active')?.dataset.tag;
+            const finalWritings = activeTag && activeTag !== 'all'
+                ? filteredWritings.filter(w => w.tags && w.tags.includes(activeTag))
+                : filteredWritings;
 
-                // 삭제 버튼 이벤트 리스너
-                const deleteBtn = item.querySelector('.delete-writing-btn');
-                deleteBtn.addEventListener('click', (e) => {
-                    e.stopPropagation(); // 중요: 글 수정 이벤트가 실행되지 않도록 막습니다.
-                    if (confirm('정말 삭제하시겠습니까?')) {
-                        moveWritingToTrash(id);
-                    }
-                });
+            renderWritingList(finalWritings);
 
-                listElement.appendChild(item);
+        }, (error) => console.error("글 목록 수신 오류:", error));
+    }
 
-                const option = document.createElement('option');
-                option.value = id;
-                option.textContent = writing.title || '무제';
-                selectElement.appendChild(option);
-            });
-        }, (error) => {
-            console.error("글 목록 수신 오류:", error);
+    function renderTags(tags) {
+        const tagContainer = document.getElementById('tag-filter-container');
+        const currentActiveTag = tagContainer.querySelector('.tag-filter.active')?.dataset.tag || 'all';
+        tagContainer.innerHTML = '';
+        
+        const createTag = (tag, text) => {
+            const el = document.createElement('span');
+            el.className = 'tag-filter';
+            el.textContent = text;
+            el.dataset.tag = tag;
+            if (tag === currentActiveTag) el.classList.add('active');
+            el.addEventListener('click', handleTagClick);
+            return el;
+        };
+
+        tagContainer.appendChild(createTag('all', '전체'));
+        tags.forEach(tag => tagContainer.appendChild(createTag(tag, `#${tag}`)));
+    }
+
+    function handleTagClick(e) {
+        document.querySelector('.tag-filter.active')?.classList.remove('active');
+        e.target.classList.add('active');
+        listenForWritings();
+    }
+
+    function renderWritingList(writings) {
+        const listElement = document.getElementById('smart-writing-list');
+        const selectElement = document.getElementById('analytics-writing-select');
+        listElement.innerHTML = '';
+        selectElement.innerHTML = '<option value="">분석할 글을 선택하세요</option>';
+        
+        writings.forEach(writing => {
+            listElement.appendChild(createWritingElement(writing));
+            const option = document.createElement('option');
+            option.value = writing.id;
+            option.textContent = writing.title || '무제';
+            selectElement.appendChild(option);
         });
-        unsubscribeListeners.push(unsubscribe);
+    }
+
+    function createWritingElement(writing) {
+        const item = document.createElement('div');
+        item.classList.add('smart-item');
+        item.dataset.id = writing.id;
+
+        const updatedDate = writing.updatedAt?.toDate().toLocaleString() || '날짜 없음';
+        const createdDate = writing.createdAt?.toDate().toLocaleString() || '날짜 없음';
+        
+        const tagsHtml = (writing.tags && Array.isArray(writing.tags))
+            ? `<div class="item-tags">${writing.tags.map(tag => `<span>#${tag}</span>`).join(' ')}</div>`
+            : '';
+        
+        item.innerHTML = `
+            <h3 class="smart-item-title">${writing.title || '무제'}</h3>
+            ${tagsHtml} 
+            <p class="smart-item-summary">${(writing.content || '').substring(0, 150)}...</p>
+            <div class="smart-item-dates">
+                <span>수정: ${updatedDate}</span>
+                <span>게시: ${createdDate}</span>
+            </div>
+            <button class="delete-writing-btn" title="휴지통으로 이동"><i class="fas fa-trash"></i></button>
+        `;
+        
+        item.addEventListener('click', e => { 
+            if (!e.target.closest('.delete-writing-btn')) {
+                openEditorModal(writing, writing.id, false);
+            }
+        });
+        const deleteBtn = item.querySelector('.delete-writing-btn');
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (confirm('정말 삭제하시겠습니까?')) moveWritingToTrash(writing.id);
+        });
+        return item;
     }
 
     async function moveWritingToTrash(writingId) {
         if (!currentUser || !writingId) return;
-
         const writingRef = doc(db, `users/${currentUser.uid}/writings`, writingId);
-        const trashCollectionRef = collection(db, `users/${currentUser.uid}/trash`);
-
         try {
             const writingSnap = await getDoc(writingRef);
             if (writingSnap.exists()) {
-                const writingData = writingSnap.data();
-                
-                // 'trash' 컬렉션에 deletedAt 타임스탬프와 함께 문서를 추가합니다.
-                await addDoc(trashCollectionRef, {
-                    ...writingData,
+                await addDoc(collection(db, `users/${currentUser.uid}/trash`), {
+                    ...writingSnap.data(),
                     deletedAt: serverTimestamp()
                 });
-
-                // 원본 문서를 삭제합니다.
                 await deleteDoc(writingRef);
             }
         } catch (error) {
@@ -547,69 +574,52 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function listenForTrashItems() {
         if (!currentUser) return;
+        if (unsubscribeListeners.trash) unsubscribeListeners.trash();
         const q = query(collection(db, `users/${currentUser.uid}/trash`), orderBy('deletedAt', 'desc'));
     
-        const unsubscribe = onSnapshot(q, (snapshot) => {
+        unsubscribeListeners.trash = onSnapshot(q, (snapshot) => {
             const trashList = document.getElementById('trash-list');
-            trashList.innerHTML = '';
-    
-            if (snapshot.empty) {
-                trashList.innerHTML = '<p style="text-align: center; color: var(--text-muted-color);">휴지통이 비어 있습니다.</p>';
-                return;
-            }
-    
+            trashList.innerHTML = snapshot.empty 
+                ? '<p style="text-align: center; color: var(--text-muted-color);">휴지통이 비어 있습니다.</p>'
+                : '';
+            
             snapshot.forEach(docSnapshot => {
-                const trashedItem = docSnapshot.data();
+                const item = docSnapshot.data();
                 const id = docSnapshot.id;
                 const itemDiv = document.createElement('div');
                 itemDiv.classList.add('trash-item');
-    
-                const deletedDate = trashedItem.deletedAt?.toDate().toLocaleDateString() || '날짜 없음';
-    
                 itemDiv.innerHTML = `
                     <div class="trash-item-info">
-                        <h4>${trashedItem.title || '무제'}</h4>
-                        <p>삭제된 날짜: ${deletedDate}</p>
+                        <h4>${item.title || '무제'}</h4>
+                        <p>삭제된 날짜: ${item.deletedAt?.toDate().toLocaleDateString() || '날짜 없음'}</p>
                     </div>
                     <div class="trash-item-actions">
                         <button class="restore-btn" data-id="${id}">복원</button>
                         <button class="perm-delete-btn" data-id="${id}">영구 삭제</button>
-                    </div>
-                `;
+                    </div>`;
     
-                itemDiv.querySelector('.restore-btn').addEventListener('click', () => {
-                    restoreWritingFromTrash(id);
-                });
-    
+                itemDiv.querySelector('.restore-btn').addEventListener('click', () => restoreWritingFromTrash(id));
                 itemDiv.querySelector('.perm-delete-btn').addEventListener('click', () => {
                     if (confirm('이 항목을 영구적으로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
                         permanentlyDeleteWriting(id);
                     }
                 });
-    
                 trashList.appendChild(itemDiv);
             });
         }, (error) => {
             console.error("휴지통 목록 수신 오류:", error);
             trashList.innerHTML = '<p>휴지통을 불러오는 데 실패했습니다.</p>';
         });
-    
-        unsubscribeListeners.push(unsubscribe);
     }
     
     async function restoreWritingFromTrash(trashId) {
         if (!currentUser || !trashId) return;
-    
         const trashDocRef = doc(db, `users/${currentUser.uid}/trash`, trashId);
-        const writingsCollectionRef = collection(db, `users/${currentUser.uid}/writings`);
-    
         try {
             const trashDocSnap = await getDoc(trashDocRef);
             if (trashDocSnap.exists()) {
-                const writingData = trashDocSnap.data();
-                delete writingData.deletedAt;
-                
-                await addDoc(writingsCollectionRef, writingData);
+                const { deletedAt, ...writingData } = trashDocSnap.data();
+                await addDoc(collection(db, `users/${currentUser.uid}/writings`), writingData);
                 await deleteDoc(trashDocRef);
             }
         } catch (error) {
@@ -620,10 +630,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     async function permanentlyDeleteWriting(trashId) {
         if (!currentUser || !trashId) return;
-    
-        const trashDocRef = doc(db, `users/${currentUser.uid}/trash`, trashId);
         try {
-            await deleteDoc(trashDocRef);
+            await deleteDoc(doc(db, `users/${currentUser.uid}/trash`, trashId));
         } catch (error) {
             console.error("영구 삭제 오류:", error);
             alert('글을 영구적으로 삭제하는 중 오류가 발생했습니다.');
@@ -632,8 +640,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // --- ANALYTICS HUB 기능 ---
     function initAnalyticsHub() {
-        const analyzeBtn = document.getElementById('analyze-text-btn');
-        analyzeBtn.addEventListener('click', runAnalysis);
+        document.getElementById('analyze-text-btn').addEventListener('click', runAnalysis);
     }
 
     async function runAnalysis() {
@@ -653,19 +660,13 @@ document.addEventListener('DOMContentLoaded', () => {
             const docRef = doc(db, `users/${currentUser.uid}/writings`, writingId);
             const docSnap = await getDoc(docRef);
 
-            if (!docSnap.exists()) {
-                 throw new Error("문서를 찾을 수 없습니다.");
-            }
-            
-            const textContent = docSnap.data().content;
-            if (!textContent || textContent.trim() === '') {
-                alert('분석할 내용이 없습니다.');
-                loadingSpinner.style.display = 'none';
-                return;
+            if (!docSnap.exists() || !docSnap.data().content) {
+                 alert('분석할 내용이 없습니다.');
+                 return;
             }
             
             const analyzeText = httpsCallable(functions, 'analyzeText');
-            const result = await analyzeText({ text: textContent });
+            const result = await analyzeText({ text: docSnap.data().content });
             displayAnalysisResults(result.data);
 
         } catch (error) {
@@ -684,7 +685,6 @@ document.addEventListener('DOMContentLoaded', () => {
         sentimentChart = new Chart(sentimentCtx, {
             type: 'doughnut',
             data: {
-                // [수정] 현재는 개체 분석만 지원하므로 감성 분석은 비활성화
                 labels: ['긍정', '부정', '중립', '복합'],
                 datasets: [{
                     label: '감성 점수',
@@ -696,21 +696,11 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         const entityList = document.getElementById('entity-list');
-        entityList.innerHTML = '';
-        if(data.entities && data.entities.length > 0) {
-            data.entities.slice(0, 10).forEach(entity => {
-                const li = document.createElement('li');
-                li.innerHTML = `${entity.name} <span class="salience">(${entity.type}, 중요도: ${entity.salience.toFixed(2)})</span>`;
-                entityList.appendChild(li);
-            });
-        } else {
-             entityList.innerHTML = '<li>추출된 키워드가 없습니다.</li>';
-        }
+        entityList.innerHTML = data.entities?.length > 0
+            ? data.entities.slice(0, 10).map(entity => `<li>${entity.name} <span class="salience">(${entity.type}, 중요도: ${entity.salience.toFixed(2)})</span></li>`).join('')
+            : '<li>추출된 키워드가 없습니다.</li>';
         
-
-        const categoryResult = document.getElementById('category-result');
-        // [수정] 현재는 카테고리 분석을 지원하지 않음
-        categoryResult.textContent = '카테고리 분석 결과 없음';
+        document.getElementById('category-result').textContent = '카테고리 분석 결과 없음';
     }
 });
 

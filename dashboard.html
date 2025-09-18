@@ -85,14 +85,29 @@
 
             <div id="reflection-hub" class="tab-content">
                 <div class="smart-list-header">
-                    <h2>Reflection Hub</h2>
-                    <div class="header-buttons">
+                    <div class="header-left">
+                        <h2>Reflection Hub</h2>
+                        <div class="search-wrapper">
+                            <i class="fas fa-search"></i>
+                            <input type="text" id="writing-search-input" placeholder="키워드로 검색...">
+                        </div>
+                    </div>
+                    <div class="header-right">
+                        <select id="sort-options">
+                            <option value="updatedAt-desc">수정 날짜 (최신순)</option>
+                            <option value="createdAt-desc">게시 날짜 (최신순)</option>
+                            <option value="createdAt-asc">게시 날짜 (오래된순)</option>
+                        </select>
                         <button id="new-writing-btn"><i class="fas fa-plus"></i> 새 글쓰기</button>
                         <button id="open-trash-btn" title="휴지통"><i class="fas fa-trash"></i></button>
                     </div>
                 </div>
+                <div id="tag-filter-container">
+                    <!-- 태그는 JS를 통해 동적으로 추가됩니다. -->
+                </div>
                 <div id="smart-writing-list">
-                    </div>
+                    <!-- 글 목록이 여기에 동적으로 추가됩니다. -->
+                </div>
             </div>
 
             <div id="analytics-hub" class="tab-content">
@@ -124,21 +139,31 @@
         
         <div id="editor-modal" class="editor-container" style="display: none;">
             <header class="editor-header">
-                <h1>모바일 글쓰기</h1>
+                <h1 id="modal-title">글 보기</h1>
                 <div class="button-group">
-                    <button id="save-and-close-btn">저장 후 닫기</button>
-                    <button id="save-and-blog-btn" title="저장 후 블로그로 이동">
+                    <button id="edit-writing-btn">수정</button>
+                    <button id="save-and-close-btn" style="display: none;">저장</button>
+                    <button id="cancel-edit-btn" style="display: none;">취소</button>
+                    <button id="save-and-blog-btn" title="블로그에 복사">
                         <i class="fa-solid fa-n"></i>
                     </button>
                 </div>
             </header>
             <main class="editor-main">
-                <input type="text" id="popup-title" placeholder="제목을 입력하세요">
-                <textarea id="popup-content" placeholder="내용을 입력하세요..."></textarea>
+                <!-- 읽기 모드 -->
+                <div id="read-mode-content">
+                    <h2 id="read-title"></h2>
+                    <div id="read-tags"></div>
+                    <div id="read-body"></div>
+                </div>
+                <!-- 쓰기 모드 -->
+                <div id="write-mode-content" style="display: none;">
+                    <input type="text" id="popup-title" placeholder="제목을 입력하세요">
+                    <textarea id="popup-content" placeholder="내용을 입력하세요... #태그 형식으로 태그를 추가할 수 있습니다."></textarea>
+                </div>
             </main>
         </div>
 
-        <!-- 휴지통 모달 추가 -->
         <div id="trash-modal" style="display: none;">
             <div class="trash-content">
                 <div class="trash-header">
@@ -152,7 +177,7 @@
 
     </div>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    
     <script type="module" src="dashboard.js"></script>
 </body>
 </html>
+
