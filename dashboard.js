@@ -45,6 +45,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const editBtn = document.getElementById('edit-writing-btn');
     const cancelBtn = document.getElementById('cancel-edit-btn');
     const closeModalBtn = document.getElementById('close-modal-btn');
+    const saveDraftBtn = document.getElementById('save-draft-btn');
     const modalTitleEl = document.getElementById('modal-title');
     const readModeContent = document.getElementById('read-mode-content');
     const writeModeContent = document.getElementById('write-mode-content');
@@ -330,7 +331,6 @@ document.addEventListener('DOMContentLoaded', () => {
     function initReflectionHub() {
         document.getElementById('new-writing-btn').addEventListener('click', () => openEditorModal(null, null, true));
         
-        // 휴지통 모달 이벤트
         const trashModal = document.getElementById('trash-modal');
         document.getElementById('open-trash-btn').addEventListener('click', () => {
             trashModal.style.display = 'flex';
@@ -338,7 +338,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('close-trash-btn').addEventListener('click', () => trashModal.style.display = 'none');
         
-        // 임시저장 모달 이벤트
         const draftsModal = document.getElementById('drafts-modal');
         document.getElementById('open-drafts-btn').addEventListener('click', () => {
             draftsModal.style.display = 'flex';
@@ -346,7 +345,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         document.getElementById('close-drafts-btn').addEventListener('click', () => draftsModal.style.display = 'none');
         
-        // 모달 외부 클릭 시 닫기
         window.addEventListener('click', (e) => { 
             if (e.target === trashModal) trashModal.style.display = 'none'; 
             if (e.target === draftsModal) draftsModal.style.display = 'none';
@@ -355,21 +353,43 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('sort-options').addEventListener('change', listenForWritings);
         document.getElementById('writing-search-input').addEventListener('input', listenForWritings);
 
-        // 글쓰기/보기 모달 버튼 이벤트
         editBtn.addEventListener('click', () => setModalMode(true));
         cancelBtn.addEventListener('click', () => handleCloseAttempt(true));
         closeModalBtn.addEventListener('click', () => handleCloseAttempt(false));
-        saveBtn.addEventListener('click', () => saveWriting());
+        saveBtn.addEventListener('click', () => saveWriting().then(success => {
+            if (success) {
+                // 저장 성공 후 읽기 모드로 전환
+                const finalDocRef = doc(db, `users/${currentUser.uid}/writings`, currentWritingId);
+                getDoc(finalDocRef).then(docSnap => {
+                    if (docSnap.exists()) {
+                         openEditorModal(docSnap.data(), docSnap.id, false);
+                    } else {
+                         closeEditorModal();
+                    }
+                });
+            }
+        }));
+        saveDraftBtn.addEventListener('click', () => saveAsDraft(true)); // true는 사용자 액션임을 의미
 
-        blogBtn.addEventListener('click', () => {
-            const contentToCopy = isEditMode 
-                ? `${titleInput.value}\n\n${contentInput.value}` 
-                : `${document.getElementById('read-title').textContent}\n\n${document.getElementById('read-body').innerText}`;
-            
-            navigator.clipboard.writeText(contentToCopy).then(() => {
-                alert('제목과 본문이 클립보드에 복사되었습니다.');
-                window.open("https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10", '_blank');
-            }).catch(err => console.error('클립보드 복사 실패:', err));
+        blogBtn.addEventListener('click', async () => {
+            if (!isEditMode) {
+                const contentToCopy = `${document.getElementById('read-title').textContent}\n\n${document.getElementById('read-body').innerText}`;
+                 navigator.clipboard.writeText(contentToCopy).then(() => {
+                    alert('제목과 본문이 클립보드에 복사되었습니다.');
+                    window.open("https://blog.naver.com/tenmilli_10", '_blank');
+                });
+                return;
+            }
+
+            const success = await saveWriting();
+            if (success) {
+                const contentToCopy = `${titleInput.value}\n\n${contentInput.value}`;
+                navigator.clipboard.writeText(contentToCopy).then(() => {
+                    alert('글 저장 및 복사가 완료되었습니다.');
+                    window.open("https://blog.naver.com/tenmilli_10", '_blank');
+                    closeEditorModal();
+                }).catch(err => console.error('클립보드 복사 실패:', err));
+            }
         });
 
         listenForWritings();
@@ -379,30 +399,26 @@ document.addEventListener('DOMContentLoaded', () => {
         currentWritingId = id;
         currentDraftId = draftId;
     
-        if (writing) {
-            document.getElementById('read-title').textContent = writing.title || '';
-            document.getElementById('read-body').innerHTML = (writing.content || '').replace(/\n/g, '<br>');
-            const readTagsContainer = document.getElementById('read-tags');
-            readTagsContainer.innerHTML = '';
-            if (writing.tags && Array.isArray(writing.tags)) {
-                writing.tags.forEach(tag => {
-                    const tagEl = document.createElement('span');
-                    tagEl.textContent = `#${tag}`;
-                    readTagsContainer.appendChild(tagEl);
-                });
-            }
-            titleInput.value = writing.title || '';
-            contentInput.value = writing.content || '';
-            if(writing.originalWritingId !== undefined) {
-                currentWritingId = writing.originalWritingId;
-            }
+        const data = writing || { title: '', content: '', tags: [] };
+        
+        document.getElementById('read-title').textContent = data.title;
+        document.getElementById('read-body').innerHTML = (data.content || '').replace(/\n/g, '<br>');
+        
+        const readTagsContainer = document.getElementById('read-tags');
+        readTagsContainer.innerHTML = '';
+        if (data.tags && Array.isArray(data.tags)) {
+            data.tags.forEach(tag => {
+                const tagEl = document.createElement('span');
+                tagEl.textContent = `#${tag}`;
+                readTagsContainer.appendChild(tagEl);
+            });
+        }
 
-        } else {
-            titleInput.value = '';
-            contentInput.value = '';
-            document.getElementById('read-title').textContent = '';
-            document.getElementById('read-body').innerHTML = '';
-            document.getElementById('read-tags').innerHTML = '';
+        titleInput.value = data.title;
+        contentInput.value = data.content;
+
+        if (writing && writing.originalWritingId !== undefined) {
+            currentWritingId = writing.originalWritingId;
         }
         
         setModalMode(startInEditMode);
@@ -414,17 +430,24 @@ document.addEventListener('DOMContentLoaded', () => {
         readModeContent.style.display = edit ? 'none' : 'block';
         writeModeContent.style.display = edit ? 'flex' : 'none';
         
-        editBtn.style.display = edit ? 'none' : (currentWritingId ? 'block' : 'none');
-        saveBtn.style.display = edit ? 'block' : 'none';
+        const isNewWriting = !currentWritingId;
+
+        // 버튼 표시/숨김 로직
+        document.getElementById('read-mode-buttons').style.display = edit ? 'none' : 'flex';
+        document.getElementById('write-mode-buttons').style.display = edit ? 'flex' : 'none';
         
-        cancelBtn.style.display = edit ? 'block' : 'none';
+        // [수정] 임시저장 버튼은 새 글일 때만 보이도록 수정
+        saveDraftBtn.style.display = edit && isNewWriting ? 'block' : 'none';
+
+        editBtn.style.display = !edit && !isNewWriting ? 'block' : 'none';
+        
+        blogBtn.style.display = edit ? 'none' : 'block';
         closeModalBtn.style.display = edit ? 'none' : 'block';
 
-        modalTitleEl.textContent = edit ? (currentWritingId ? '글 수정' : '새 글쓰기') : '글 보기';
+        modalTitleEl.textContent = edit ? (isNewWriting ? '새 글쓰기' : '글 수정') : '글 보기';
 
         if (edit) {
-            originalContentForDraftCheck.title = titleInput.value;
-            originalContentForDraftCheck.content = contentInput.value;
+            originalContentForDraftCheck = { title: titleInput.value, content: contentInput.value };
         }
     }
     
@@ -435,27 +458,47 @@ document.addEventListener('DOMContentLoaded', () => {
         isEditMode = false;
     }
 
+    // dashboard.js
+
     async function handleCloseAttempt(isCancelButton) {
         const hasChanged = titleInput.value !== originalContentForDraftCheck.title || contentInput.value !== originalContentForDraftCheck.content;
 
         if (isEditMode && hasChanged) {
-            if (confirm('수정 중인 내용이 있습니다. 임시 저장하시겠습니까?')) {
-                await saveAsDraft();
+            const isNewWriting = !currentWritingId;
+            let confirmResult = false;
+
+            // [수정] 새 글일 때만 임시저장 여부를 물어봄
+            if (isNewWriting) {
+                confirmResult = confirm('작성 중인 내용을 임시 저장하시겠습니까?');
+                if (confirmResult) {
+                    await saveAsDraft(false);
+                }
+            } else {
+                // 기존 글 수정 시에는 저장 여부만 물어봄
+                confirmResult = confirm('수정사항을 저장하지 않고 나가시겠습니까?');
+                if (!confirmResult) return; // "아니오"를 누르면 나가지 않음
             }
         }
 
+        // "취소" 버튼을 눌렀고, 기존 글을 수정 중이었다면 읽기 모드로 돌아감
         if (isCancelButton && currentWritingId) {
             setModalMode(false);
         } else {
+            // 그 외의 경우(새 글 작성 취소, X 버튼 클릭 등)에는 모달을 닫음
             closeEditorModal();
         }
     }
     
-    async function saveAsDraft() {
+    // dashboard.js
+
+    async function saveAsDraft(isUserAction) {
         if (!currentUser) return;
         const title = titleInput.value.trim();
         const content = contentInput.value.trim();
-        if (!title && !content) return;
+        if (!title && !content) {
+            if (isUserAction) alert('내용이 없어 임시저장할 수 없습니다.');
+            return;
+        };
 
         try {
             await addDoc(collection(db, `users/${currentUser.uid}/drafts`), {
@@ -464,13 +507,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 content,
                 savedAt: serverTimestamp()
             });
-            alert('임시 저장되었습니다.');
+            
+            // [수정] 임시저장 후, 현재 내용을 "원본"으로 간주하도록 상태 업데이트
+            originalContentForDraftCheck = { title, content };
+
+            if (isUserAction) alert('임시 저장되었습니다.');
         } catch (error) {
             console.error("임시 저장 오류:", error);
-            alert("임시 저장에 실패했습니다.");
+            if (isUserAction) alert("임시 저장에 실패했습니다.");
         }
     }
-
 
     async function saveWriting() {
         saveBtn.disabled = true;
@@ -481,53 +527,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const content = contentInput.value.trim();
             if (!title) {
                 alert('제목을 입력해야 합니다.');
-                saveBtn.disabled = false;
-                saveBtn.textContent = '저장';
-                return;
+                return false;
             }
             const tags = content.match(/#([a-zA-Z0-9ㄱ-ㅎ|ㅏ-ㅣ|가-힣]+)/g)?.map(tag => tag.substring(1)) || [];
             const dataToSave = { title, content, tags, updatedAt: serverTimestamp() };
             const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
-            let savedWritingId = currentWritingId;
-
+            
             if (currentWritingId) {
                 await updateDoc(doc(collectionRef, currentWritingId), dataToSave);
             } else {
                 dataToSave.createdAt = serverTimestamp();
                 const newDocRef = await addDoc(collectionRef, dataToSave);
-                savedWritingId = newDocRef.id;
+                currentWritingId = newDocRef.id; // 새 글 ID 업데이트
             }
 
-            // 이 저장이 임시저장 글에서 비롯되었다면, 해당 임시저장 글을 삭제
             if (currentDraftId) {
                 await deleteDoc(doc(db, `users/${currentUser.uid}/drafts`, currentDraftId));
             }
-            // 그리고 이 글과 관련된 다른 모든 임시저장 글들도 삭제
-            if (savedWritingId) {
-                 const draftsQuery = query(collection(db, `users/${currentUser.uid}/drafts`), where("originalWritingId", "==", savedWritingId));
+            if (currentWritingId) {
+                 const draftsQuery = query(collection(db, `users/${currentUser.uid}/drafts`), where("originalWritingId", "==", currentWritingId));
                  const draftSnapshot = await getDocs(draftsQuery);
-                 draftSnapshot.forEach(async (docSnapshot) => {
-                     await deleteDoc(docSnapshot.ref);
-                 });
+                 draftSnapshot.forEach(doc => deleteDoc(doc.ref));
             }
-
-            const finalDocRef = doc(collectionRef, savedWritingId);
-            const finalDocSnap = await getDoc(finalDocRef);
-            if (finalDocSnap.exists()) {
-                openEditorModal(finalDocSnap.data(), savedWritingId, false);
-            } else {
-                closeEditorModal();
-            }
-
+            return true;
         } catch (error) {
             console.error("글 저장 오류:", error);
             alert(`글 저장에 실패했습니다: ${error.message}`);
+            return false;
         } finally {
             saveBtn.disabled = false;
             saveBtn.textContent = '저장';
         }
     }
 
+    // --- 글 목록, 태그 렌더링 및 필터링 ---
     function listenForWritings() {
         if (!currentUser) return;
         if (unsubscribeListeners.writings) unsubscribeListeners.writings();
@@ -635,6 +668,7 @@ document.addEventListener('DOMContentLoaded', () => {
         return item;
     }
 
+    // --- 휴지통 및 임시저장 공통 로직 ---
     async function moveWritingToTrash(writingId) {
         if (!currentUser || !writingId) return;
         const writingRef = doc(db, `users/${currentUser.uid}/writings`, writingId);
@@ -664,101 +698,67 @@ document.addEventListener('DOMContentLoaded', () => {
                 ? '<p style="text-align: center; color: var(--text-muted-color);">휴지통이 비어 있습니다.</p>'
                 : '';
             
-            snapshot.forEach(docSnapshot => {
-                const item = docSnapshot.data();
-                const id = docSnapshot.id;
-                const itemDiv = document.createElement('div');
-                itemDiv.classList.add('list-item');
-                itemDiv.innerHTML = `
-                    <div class="list-item-info">
-                        <h4>${item.title || '무제'}</h4>
-                        <p>삭제된 날짜: ${item.deletedAt?.toDate().toLocaleDateString() || '날짜 없음'}</p>
-                    </div>
-                    <div class="list-item-actions">
-                        <button class="restore-btn" data-id="${id}">복원</button>
-                        <button class="perm-delete-btn" data-id="${id}">영구 삭제</button>
-                    </div>`;
-    
-                itemDiv.querySelector('.restore-btn').addEventListener('click', () => restoreWritingFromTrash(id));
-                itemDiv.querySelector('.perm-delete-btn').addEventListener('click', () => {
-                    if (confirm('이 항목을 영구적으로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
-                        permanentlyDeleteWriting(id);
-                    }
-                });
-                trashList.appendChild(itemDiv);
-            });
+            snapshot.forEach(docSnapshot => renderListItem(trashList, docSnapshot.data(), docSnapshot.id, 'trash'));
         }, (error) => {
             console.error("휴지통 목록 수신 오류:", error);
             trashList.innerHTML = '<p>휴지통을 불러오는 데 실패했습니다.</p>';
         });
     }
-    
-    // --- 임시저장 관련 함수 ---
+
     function listenForDrafts() {
         if (!currentUser) return;
         if (unsubscribeListeners.drafts) unsubscribeListeners.drafts();
 
         const q = query(collection(db, `users/${currentUser.uid}/drafts`), orderBy('savedAt', 'desc'));
         unsubscribeListeners.drafts = onSnapshot(q, (snapshot) => {
-            renderDraftsList(snapshot.docs);
+            const draftsList = document.getElementById('drafts-list');
+            draftsList.innerHTML = snapshot.empty
+                ? '<p style="text-align: center; color: var(--text-muted-color);">임시저장된 글이 없습니다.</p>'
+                : '';
+
+            snapshot.forEach(docSnapshot => renderListItem(draftsList, docSnapshot.data(), docSnapshot.id, 'draft'));
         }, (error) => {
             console.error("임시저장 목록 수신 오류:", error);
             document.getElementById('drafts-list').innerHTML = '<p>임시저장 목록을 불러오는 데 실패했습니다.</p>';
         });
     }
 
-    function renderDraftsList(draftDocs) {
-        const draftsList = document.getElementById('drafts-list');
-        draftsList.innerHTML = '';
-
-        if (draftDocs.length === 0) {
-            draftsList.innerHTML = '<p style="text-align: center; color: var(--text-muted-color);">임시저장된 글이 없습니다.</p>';
-            return;
+    function renderListItem(listElement, itemData, id, type) {
+        const itemDiv = document.createElement('div');
+        itemDiv.classList.add('list-item');
+        
+        let title, date, actions;
+        if (type === 'trash') {
+            title = itemData.title || '무제';
+            date = `삭제된 날짜: ${itemData.deletedAt?.toDate().toLocaleDateString() || '날짜 없음'}`;
+            actions = `<button class="restore-btn">복원</button><button class="perm-delete-btn">영구 삭제</button>`;
+        } else { // draft
+            title = itemData.title || '무제';
+            date = `저장된 시간: ${itemData.savedAt?.toDate().toLocaleString() || '날짜 없음'}`;
+            actions = `<button class="load-btn">불러오기</button><button class="perm-delete-btn">삭제</button>`;
         }
 
-        draftDocs.forEach(docSnapshot => {
-            const draft = docSnapshot.data();
-            const id = docSnapshot.id;
-            const itemDiv = document.createElement('div');
-            itemDiv.classList.add('list-item');
+        itemDiv.innerHTML = `
+            <div class="list-item-info"><h4>${title}</h4><p>${date}</p></div>
+            <div class="list-item-actions">${actions}</div>`;
 
-            itemDiv.innerHTML = `
-                <div class="list-item-info">
-                    <h4>${draft.title || '무제'}</h4>
-                    <p>저장된 시간: ${draft.savedAt?.toDate().toLocaleString() || '날짜 없음'}</p>
-                </div>
-                <div class="list-item-actions">
-                    <button class="load-btn">불러오기</button>
-                    <button class="perm-delete-btn">삭제</button>
-                </div>
-            `;
-
+        if (type === 'trash') {
+            itemDiv.querySelector('.restore-btn').addEventListener('click', () => restoreWritingFromTrash(id));
+            itemDiv.querySelector('.perm-delete-btn').addEventListener('click', () => {
+                if (confirm('이 항목을 영구적으로 삭제하시겠습니까?')) permanentlyDeleteWriting(id);
+            });
+        } else {
             itemDiv.querySelector('.load-btn').addEventListener('click', () => {
-                openEditorModal(draft, draft.originalWritingId, true, id);
+                openEditorModal(itemData, itemData.originalWritingId, true, id);
                 document.getElementById('drafts-modal').style.display = 'none';
             });
-
             itemDiv.querySelector('.perm-delete-btn').addEventListener('click', () => {
-                if (confirm('이 임시저장 글을 삭제하시겠습니까?')) {
-                    permanentlyDeleteDraft(id);
-                }
+                if (confirm('이 임시저장 글을 삭제하시겠습니까?')) permanentlyDeleteDraft(id);
             });
-
-            draftsList.appendChild(itemDiv);
-        });
-    }
-
-    async function permanentlyDeleteDraft(draftId) {
-        if (!currentUser || !draftId) return;
-        try {
-            await deleteDoc(doc(db, `users/${currentUser.uid}/drafts`, draftId));
-        } catch (error) {
-            console.error("임시저장 글 삭제 오류:", error);
-            alert('임시저장 글을 삭제하는 중 오류가 발생했습니다.');
         }
+        listElement.appendChild(itemDiv);
     }
-
-
+    
     async function restoreWritingFromTrash(trashId) {
         if (!currentUser || !trashId) return;
         const trashDocRef = doc(db, `users/${currentUser.uid}/trash`, trashId);
@@ -782,6 +782,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             console.error("영구 삭제 오류:", error);
             alert('글을 영구적으로 삭제하는 중 오류가 발생했습니다.');
+        }
+    }
+
+    async function permanentlyDeleteDraft(draftId) {
+        if (!currentUser || !draftId) return;
+        try {
+            await deleteDoc(doc(db, `users/${currentUser.uid}/drafts`, draftId));
+        } catch (error) {
+            console.error("임시저장 글 삭제 오류:", error);
+            alert('임시저장 글을 삭제하는 중 오류가 발생했습니다.');
         }
     }
     
@@ -847,7 +857,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ? data.entities.slice(0, 10).map(entity => `<li>${entity.name} <span class="salience">(${entity.type}, 중요도: ${entity.salience.toFixed(2)})</span></li>`).join('')
             : '<li>추출된 키워드가 없습니다.</li>';
         
-        document.getElementById('category-result').textContent = '카테고리 분석 결과 없음';
+        document.getElementById('category-result').textContent = '카테리 분석 결과 없음';
     }
 });
 

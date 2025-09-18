@@ -76,7 +76,7 @@
                     <div class="card stats-container">
                         <h2>뽀모도로 통계</h2>
                         <div class="chart-container-large">
-                             <canvas id="pomodoro-stats-chart"></canvas>
+                            <canvas id="pomodoro-stats-chart"></canvas>
                         </div>
                     </div>
                 </div>
@@ -92,6 +92,7 @@
                         </div>
                     </div>
                     <div class="header-right">
+
                         <select id="sort-options">
                             <option value="updatedAt-desc">수정 날짜 (최신순)</option>
                             <option value="createdAt-desc">게시 날짜 (최신순)</option>
@@ -133,17 +134,22 @@
             </div>
         </main>
         
-        <div id="editor-modal" class="editor-container" style="display: none;">
+        <div id="editor-modal">
             <header class="editor-header">
                 <h1 id="modal-title">글 보기</h1>
                 <div class="header-right-buttons">
-                    <div class="button-group">
-                         <button id="edit-writing-btn">수정</button>
-                         <button id="save-and-close-btn" style="display: none;">저장</button>
-                         <button id="cancel-edit-btn" style="display: none;">취소</button>
-                         <button id="save-and-blog-btn" title="저장 후 블로그로 이동"><i class="fa-solid fa-n"></i></button>
+                    <div class="button-group" id="read-mode-buttons">
+                        <button id="edit-writing-btn">수정</button>
                     </div>
-                    <button id="close-modal-btn" class="close-icon-btn"><i class="fas fa-times"></i></button>
+                    <div class="button-group" id="write-mode-buttons" style="display: none;">
+                        <button id="save-draft-btn">임시저장</button>
+                        <button id="save-and-close-btn">저장</button>
+                        <button id="cancel-edit-btn">취소</button>
+                    </div>
+                    <button id="save-and-blog-btn" title="블로그로 복사">
+                        <i class="fa-solid fa-n"></i>
+                    </button>
+                    <button id="close-modal-btn" class="close-icon-btn">&times;</button>
                 </div>
             </header>
             <main class="editor-main">
@@ -154,7 +160,7 @@
                 </div>
                 <div id="write-mode-content" style="display: none;">
                     <input type="text" id="popup-title" placeholder="제목을 입력하세요">
-                    <textarea id="popup-content" placeholder="내용을 입력하세요... #태그 형식으로 태그를 추가할 수 있습니다."></textarea>
+                    <textarea id="popup-content" placeholder="내용을 입력하세요..."></textarea>
                 </div>
             </main>
         </div>
@@ -176,6 +182,7 @@
                     <h2>임시저장 글</h2>
                     <button id="close-drafts-btn" class="close-icon-btn">&times;</button>
                 </div>
+                <p class="modal-info">임시저장된 글 목록입니다. 불러오거나 삭제할 수 있습니다.</p>
                 <div id="drafts-list" class="modal-list"></div>
             </div>
         </div>
