@@ -331,10 +331,30 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- REFLECTION HUB 기능 ---
     function initReflectionHub() {
         const newWritingBtn = document.getElementById('new-writing-btn');
+        const openTrashBtn = document.getElementById('open-trash-btn');
+        const closeTrashBtn = document.getElementById('close-trash-btn');
+        const trashModal = document.getElementById('trash-modal');
+
         newWritingBtn.addEventListener('click', () => {
             openEditorModal();
         });
+
+        openTrashBtn.addEventListener('click', () => {
+            trashModal.style.display = 'flex';
+        });
+
+        closeTrashBtn.addEventListener('click', () => {
+            trashModal.style.display = 'none';
+        });
+
+        window.addEventListener('click', (e) => {
+            if (e.target === trashModal) {
+                trashModal.style.display = 'none';
+            }
+        });
+
         listenForWritings();
+        listenForTrashItems();
     }
 
     function openEditorModal(writing = null, id = null) {
@@ -410,28 +430,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // ▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼▼
-    // [수정] '저장 후 블로그로 이동' 버튼 이벤트 리스너 수정
     blogBtn.addEventListener('click', async () => {
-        // 먼저 글을 저장합니다.
         if (await saveWriting()) {
-            // 1. 복사할 텍스트를 준비합니다 (제목 + 본문, 줄바꿈 유지).
             const title = titleInput.value;
             const content = contentInput.value;
-            // 제목과 본문 사이에 두 번의 줄바꿈을 넣어 단락을 구분합니다.
             const textToCopy = `${title}\n\n${content}`;
 
-            // 2. 클립보드에 복사합니다.
-            // navigator.clipboard.writeText가 보안 정책(iframe)으로 막힐 수 있어 document.execCommand를 사용합니다.
             const tempTextArea = document.createElement('textarea');
             tempTextArea.value = textToCopy;
-            // 화면에 보이지 않도록 스타일을 설정합니다.
             tempTextArea.style.position = 'absolute';
             tempTextArea.style.left = '-9999px';
             document.body.appendChild(tempTextArea);
             
             tempTextArea.select();
-            tempTextArea.setSelectionRange(0, 99999); // 모바일 기기 호환성
+            tempTextArea.setSelectionRange(0, 99999); 
 
             try {
                 const successful = document.execCommand('copy');
@@ -444,18 +456,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.error('클립보드 복사 중 오류가 발생했습니다.', err);
             }
             
-            // 임시로 만든 textarea를 제거합니다.
             document.body.removeChild(tempTextArea);
 
-            // 3. 요청하신 블로그 주소로 새 탭에서 이동합니다.
             const blogUrl = "https://blog.naver.com/tenmilli_10";
             window.open(blogUrl, '_blank');
             
-            // 4. 글쓰기 창을 닫습니다.
             closeEditorModal();
         }
     });
-    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     function listenForWritings() {
         if (!currentUser) return;
@@ -481,10 +489,23 @@ document.addEventListener('DOMContentLoaded', () => {
                     <h3 class="smart-item-title">${writing.title || '무제'}</h3>
                     <p class="smart-item-summary">${summary}</p>
                     <p class="smart-item-date">${date}</p>
+                    <button class="delete-writing-btn" title="휴지통으로 이동"><i class="fas fa-trash"></i></button>
                 `;
+                
+                // 글 수정 이벤트 리스너
                 item.addEventListener('click', () => {
                     openEditorModal(writing, id);
                 });
+
+                // 삭제 버튼 이벤트 리스너
+                const deleteBtn = item.querySelector('.delete-writing-btn');
+                deleteBtn.addEventListener('click', (e) => {
+                    e.stopPropagation(); // 중요: 글 수정 이벤트가 실행되지 않도록 막습니다.
+                    if (confirm('정말 삭제하시겠습니까?')) {
+                        moveWritingToTrash(id);
+                    }
+                });
+
                 listElement.appendChild(item);
 
                 const option = document.createElement('option');
@@ -496,6 +517,117 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error("글 목록 수신 오류:", error);
         });
         unsubscribeListeners.push(unsubscribe);
+    }
+
+    async function moveWritingToTrash(writingId) {
+        if (!currentUser || !writingId) return;
+
+        const writingRef = doc(db, `users/${currentUser.uid}/writings`, writingId);
+        const trashCollectionRef = collection(db, `users/${currentUser.uid}/trash`);
+
+        try {
+            const writingSnap = await getDoc(writingRef);
+            if (writingSnap.exists()) {
+                const writingData = writingSnap.data();
+                
+                // 'trash' 컬렉션에 deletedAt 타임스탬프와 함께 문서를 추가합니다.
+                await addDoc(trashCollectionRef, {
+                    ...writingData,
+                    deletedAt: serverTimestamp()
+                });
+
+                // 원본 문서를 삭제합니다.
+                await deleteDoc(writingRef);
+            }
+        } catch (error) {
+            console.error("휴지통 이동 오류:", error);
+            alert('삭제 중 오류가 발생했습니다.');
+        }
+    }
+
+    function listenForTrashItems() {
+        if (!currentUser) return;
+        const q = query(collection(db, `users/${currentUser.uid}/trash`), orderBy('deletedAt', 'desc'));
+    
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const trashList = document.getElementById('trash-list');
+            trashList.innerHTML = '';
+    
+            if (snapshot.empty) {
+                trashList.innerHTML = '<p style="text-align: center; color: var(--text-muted-color);">휴지통이 비어 있습니다.</p>';
+                return;
+            }
+    
+            snapshot.forEach(docSnapshot => {
+                const trashedItem = docSnapshot.data();
+                const id = docSnapshot.id;
+                const itemDiv = document.createElement('div');
+                itemDiv.classList.add('trash-item');
+    
+                const deletedDate = trashedItem.deletedAt?.toDate().toLocaleDateString() || '날짜 없음';
+    
+                itemDiv.innerHTML = `
+                    <div class="trash-item-info">
+                        <h4>${trashedItem.title || '무제'}</h4>
+                        <p>삭제된 날짜: ${deletedDate}</p>
+                    </div>
+                    <div class="trash-item-actions">
+                        <button class="restore-btn" data-id="${id}">복원</button>
+                        <button class="perm-delete-btn" data-id="${id}">영구 삭제</button>
+                    </div>
+                `;
+    
+                itemDiv.querySelector('.restore-btn').addEventListener('click', () => {
+                    restoreWritingFromTrash(id);
+                });
+    
+                itemDiv.querySelector('.perm-delete-btn').addEventListener('click', () => {
+                    if (confirm('이 항목을 영구적으로 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+                        permanentlyDeleteWriting(id);
+                    }
+                });
+    
+                trashList.appendChild(itemDiv);
+            });
+        }, (error) => {
+            console.error("휴지통 목록 수신 오류:", error);
+            trashList.innerHTML = '<p>휴지통을 불러오는 데 실패했습니다.</p>';
+        });
+    
+        unsubscribeListeners.push(unsubscribe);
+    }
+    
+    async function restoreWritingFromTrash(trashId) {
+        if (!currentUser || !trashId) return;
+    
+        const trashDocRef = doc(db, `users/${currentUser.uid}/trash`, trashId);
+        const writingsCollectionRef = collection(db, `users/${currentUser.uid}/writings`);
+    
+        try {
+            const trashDocSnap = await getDoc(trashDocRef);
+            if (trashDocSnap.exists()) {
+                const writingData = trashDocSnap.data();
+                delete writingData.deletedAt;
+                
+                await addDoc(writingsCollectionRef, writingData);
+                await deleteDoc(trashDocRef);
+            }
+        } catch (error) {
+            console.error("글 복원 오류:", error);
+            alert('글을 복원하는 중 오류가 발생했습니다.');
+        }
+    }
+    
+    async function permanentlyDeleteWriting(trashId) {
+        if (!currentUser || !trashId) return;
+    
+        const trashDocRef = doc(db, `users/${currentUser.uid}/trash`, trashId);
+        try {
+            await deleteDoc(trashDocRef);
+        } catch (error) {
+            console.error("영구 삭제 오류:", error);
+            alert('글을 영구적으로 삭제하는 중 오류가 발생했습니다.');
+        }
     }
     
     // --- ANALYTICS HUB 기능 ---
@@ -581,3 +713,4 @@ document.addEventListener('DOMContentLoaded', () => {
         categoryResult.textContent = '카테고리 분석 결과 없음';
     }
 });
+
