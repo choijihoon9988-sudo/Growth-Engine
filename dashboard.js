@@ -31,7 +31,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let unsubscribeListeners = {
         todos: null,
         writings: null,
-        trash: null
+        trash: null,
+        drafts: null
     };
     let statsChart, sentimentChart;
     
@@ -43,11 +44,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const blogBtn = document.getElementById('save-and-blog-btn');
     const editBtn = document.getElementById('edit-writing-btn');
     const cancelBtn = document.getElementById('cancel-edit-btn');
+    const closeModalBtn = document.getElementById('close-modal-btn');
     const modalTitleEl = document.getElementById('modal-title');
     const readModeContent = document.getElementById('read-mode-content');
     const writeModeContent = document.getElementById('write-mode-content');
     let currentWritingId = null;
+    let currentDraftId = null; // 현재 편집이 시작된 임시저장 문서의 ID
     let isEditMode = false;
+    let originalContentForDraftCheck = { title: '', content: '' };
 
 
     // DOM 요소 캐싱
@@ -119,7 +123,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 item.classList.add('active');
                 
                 const tabName = item.getAttribute('data-tab');
-                const targetId = `${tabName}-zone` in document.body.children ? `${tabName}-zone` : `${tabName}-hub`;
+                // ID를 정확히 찾도록 수정
+                const targetId = (tabName === 'focus') ? 'focus-zone' : `${tabName}-hub`;
                 const targetTab = document.getElementById(targetId);
                 if (targetTab) {
                     targetTab.classList.add('active');
@@ -127,13 +132,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (targetId === 'focus-zone') {
                     renderPomodoroStats();
-                } else if (targetId === 'analytics-hub') {
-                    // Analytics Hub가 활성화될 때 차트를 다시 렌더링해야 할 경우 여기에 로직 추가
                 }
             });
         });
         
-        const initiallyActiveNavItem = document.querySelector('.nav-item[data-tab="reflection"]');
+        const initiallyActiveNavItem = document.querySelector('.nav-item.active');
         if (initiallyActiveNavItem) {
             initiallyActiveNavItem.click();
         } else if (navItems.length > 0) {
@@ -326,24 +329,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- REFLECTION HUB 기능 ---
     function initReflectionHub() {
         document.getElementById('new-writing-btn').addEventListener('click', () => openEditorModal(null, null, true));
+        
+        // 휴지통 모달 이벤트
+        const trashModal = document.getElementById('trash-modal');
         document.getElementById('open-trash-btn').addEventListener('click', () => {
-            document.getElementById('trash-modal').style.display = 'flex';
+            trashModal.style.display = 'flex';
             listenForTrashItems();
         });
-        document.getElementById('close-trash-btn').addEventListener('click', () => document.getElementById('trash-modal').style.display = 'none');
-        window.addEventListener('click', (e) => { if (e.target.id === 'trash-modal') e.target.style.display = 'none'; });
+        document.getElementById('close-trash-btn').addEventListener('click', () => trashModal.style.display = 'none');
+        
+        // 임시저장 모달 이벤트
+        const draftsModal = document.getElementById('drafts-modal');
+        document.getElementById('open-drafts-btn').addEventListener('click', () => {
+            draftsModal.style.display = 'flex';
+            listenForDrafts();
+        });
+        document.getElementById('close-drafts-btn').addEventListener('click', () => draftsModal.style.display = 'none');
+        
+        // 모달 외부 클릭 시 닫기
+        window.addEventListener('click', (e) => { 
+            if (e.target === trashModal) trashModal.style.display = 'none'; 
+            if (e.target === draftsModal) draftsModal.style.display = 'none';
+        });
         
         document.getElementById('sort-options').addEventListener('change', listenForWritings);
         document.getElementById('writing-search-input').addEventListener('input', listenForWritings);
 
+        // 글쓰기/보기 모달 버튼 이벤트
         editBtn.addEventListener('click', () => setModalMode(true));
-        cancelBtn.addEventListener('click', () => {
-            if (currentWritingId) {
-                setModalMode(false);
-            } else {
-                closeEditorModal();
-            }
-        });
+        cancelBtn.addEventListener('click', () => handleCloseAttempt(true));
+        closeModalBtn.addEventListener('click', () => handleCloseAttempt(false));
         saveBtn.addEventListener('click', () => saveWriting());
 
         blogBtn.addEventListener('click', () => {
@@ -360,8 +375,9 @@ document.addEventListener('DOMContentLoaded', () => {
         listenForWritings();
     }
 
-    function openEditorModal(writing = null, id = null, startInEditMode = false) {
+    function openEditorModal(writing = null, id = null, startInEditMode = false, draftId = null) {
         currentWritingId = id;
+        currentDraftId = draftId;
     
         if (writing) {
             document.getElementById('read-title').textContent = writing.title || '';
@@ -377,6 +393,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             titleInput.value = writing.title || '';
             contentInput.value = writing.content || '';
+            if(writing.originalWritingId !== undefined) {
+                currentWritingId = writing.originalWritingId;
+            }
+
         } else {
             titleInput.value = '';
             contentInput.value = '';
@@ -386,26 +406,71 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         setModalMode(startInEditMode);
-        editorModal.style.display = 'block';
+        editorModal.style.display = 'flex';
     }
 
     function setModalMode(edit) {
         isEditMode = edit;
         readModeContent.style.display = edit ? 'none' : 'block';
-        writeModeContent.style.display = edit ? 'block' : 'none';
+        writeModeContent.style.display = edit ? 'flex' : 'none';
         
         editBtn.style.display = edit ? 'none' : (currentWritingId ? 'block' : 'none');
         saveBtn.style.display = edit ? 'block' : 'none';
+        
         cancelBtn.style.display = edit ? 'block' : 'none';
+        closeModalBtn.style.display = edit ? 'none' : 'block';
 
         modalTitleEl.textContent = edit ? (currentWritingId ? '글 수정' : '새 글쓰기') : '글 보기';
+
+        if (edit) {
+            originalContentForDraftCheck.title = titleInput.value;
+            originalContentForDraftCheck.content = contentInput.value;
+        }
     }
     
     function closeEditorModal() {
         editorModal.style.display = 'none';
         currentWritingId = null;
+        currentDraftId = null;
         isEditMode = false;
     }
+
+    async function handleCloseAttempt(isCancelButton) {
+        const hasChanged = titleInput.value !== originalContentForDraftCheck.title || contentInput.value !== originalContentForDraftCheck.content;
+
+        if (isEditMode && hasChanged) {
+            if (confirm('수정 중인 내용이 있습니다. 임시 저장하시겠습니까?')) {
+                await saveAsDraft();
+            }
+        }
+
+        if (isCancelButton && currentWritingId) {
+            setModalMode(false);
+        } else {
+            closeEditorModal();
+        }
+    }
+    
+    async function saveAsDraft() {
+        if (!currentUser) return;
+        const title = titleInput.value.trim();
+        const content = contentInput.value.trim();
+        if (!title && !content) return;
+
+        try {
+            await addDoc(collection(db, `users/${currentUser.uid}/drafts`), {
+                originalWritingId: currentWritingId,
+                title,
+                content,
+                savedAt: serverTimestamp()
+            });
+            alert('임시 저장되었습니다.');
+        } catch (error) {
+            console.error("임시 저장 오류:", error);
+            alert("임시 저장에 실패했습니다.");
+        }
+    }
+
 
     async function saveWriting() {
         saveBtn.disabled = true;
@@ -416,24 +481,40 @@ document.addEventListener('DOMContentLoaded', () => {
             const content = contentInput.value.trim();
             if (!title) {
                 alert('제목을 입력해야 합니다.');
+                saveBtn.disabled = false;
+                saveBtn.textContent = '저장';
                 return;
             }
             const tags = content.match(/#([a-zA-Z0-9ㄱ-ㅎ|ㅏ-ㅣ|가-힣]+)/g)?.map(tag => tag.substring(1)) || [];
             const dataToSave = { title, content, tags, updatedAt: serverTimestamp() };
             const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
+            let savedWritingId = currentWritingId;
 
             if (currentWritingId) {
                 await updateDoc(doc(collectionRef, currentWritingId), dataToSave);
             } else {
                 dataToSave.createdAt = serverTimestamp();
                 const newDocRef = await addDoc(collectionRef, dataToSave);
-                currentWritingId = newDocRef.id;
+                savedWritingId = newDocRef.id;
             }
 
-            const docRef = doc(collectionRef, currentWritingId);
-            const docSnap = await getDoc(docRef);
-            if (docSnap.exists()) {
-                openEditorModal(docSnap.data(), currentWritingId, false);
+            // 이 저장이 임시저장 글에서 비롯되었다면, 해당 임시저장 글을 삭제
+            if (currentDraftId) {
+                await deleteDoc(doc(db, `users/${currentUser.uid}/drafts`, currentDraftId));
+            }
+            // 그리고 이 글과 관련된 다른 모든 임시저장 글들도 삭제
+            if (savedWritingId) {
+                 const draftsQuery = query(collection(db, `users/${currentUser.uid}/drafts`), where("originalWritingId", "==", savedWritingId));
+                 const draftSnapshot = await getDocs(draftsQuery);
+                 draftSnapshot.forEach(async (docSnapshot) => {
+                     await deleteDoc(docSnapshot.ref);
+                 });
+            }
+
+            const finalDocRef = doc(collectionRef, savedWritingId);
+            const finalDocSnap = await getDoc(finalDocRef);
+            if (finalDocSnap.exists()) {
+                openEditorModal(finalDocSnap.data(), savedWritingId, false);
             } else {
                 closeEditorModal();
             }
@@ -587,13 +668,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 const item = docSnapshot.data();
                 const id = docSnapshot.id;
                 const itemDiv = document.createElement('div');
-                itemDiv.classList.add('trash-item');
+                itemDiv.classList.add('list-item');
                 itemDiv.innerHTML = `
-                    <div class="trash-item-info">
+                    <div class="list-item-info">
                         <h4>${item.title || '무제'}</h4>
                         <p>삭제된 날짜: ${item.deletedAt?.toDate().toLocaleDateString() || '날짜 없음'}</p>
                     </div>
-                    <div class="trash-item-actions">
+                    <div class="list-item-actions">
                         <button class="restore-btn" data-id="${id}">복원</button>
                         <button class="perm-delete-btn" data-id="${id}">영구 삭제</button>
                     </div>`;
@@ -612,6 +693,72 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
     
+    // --- 임시저장 관련 함수 ---
+    function listenForDrafts() {
+        if (!currentUser) return;
+        if (unsubscribeListeners.drafts) unsubscribeListeners.drafts();
+
+        const q = query(collection(db, `users/${currentUser.uid}/drafts`), orderBy('savedAt', 'desc'));
+        unsubscribeListeners.drafts = onSnapshot(q, (snapshot) => {
+            renderDraftsList(snapshot.docs);
+        }, (error) => {
+            console.error("임시저장 목록 수신 오류:", error);
+            document.getElementById('drafts-list').innerHTML = '<p>임시저장 목록을 불러오는 데 실패했습니다.</p>';
+        });
+    }
+
+    function renderDraftsList(draftDocs) {
+        const draftsList = document.getElementById('drafts-list');
+        draftsList.innerHTML = '';
+
+        if (draftDocs.length === 0) {
+            draftsList.innerHTML = '<p style="text-align: center; color: var(--text-muted-color);">임시저장된 글이 없습니다.</p>';
+            return;
+        }
+
+        draftDocs.forEach(docSnapshot => {
+            const draft = docSnapshot.data();
+            const id = docSnapshot.id;
+            const itemDiv = document.createElement('div');
+            itemDiv.classList.add('list-item');
+
+            itemDiv.innerHTML = `
+                <div class="list-item-info">
+                    <h4>${draft.title || '무제'}</h4>
+                    <p>저장된 시간: ${draft.savedAt?.toDate().toLocaleString() || '날짜 없음'}</p>
+                </div>
+                <div class="list-item-actions">
+                    <button class="load-btn">불러오기</button>
+                    <button class="perm-delete-btn">삭제</button>
+                </div>
+            `;
+
+            itemDiv.querySelector('.load-btn').addEventListener('click', () => {
+                openEditorModal(draft, draft.originalWritingId, true, id);
+                document.getElementById('drafts-modal').style.display = 'none';
+            });
+
+            itemDiv.querySelector('.perm-delete-btn').addEventListener('click', () => {
+                if (confirm('이 임시저장 글을 삭제하시겠습니까?')) {
+                    permanentlyDeleteDraft(id);
+                }
+            });
+
+            draftsList.appendChild(itemDiv);
+        });
+    }
+
+    async function permanentlyDeleteDraft(draftId) {
+        if (!currentUser || !draftId) return;
+        try {
+            await deleteDoc(doc(db, `users/${currentUser.uid}/drafts`, draftId));
+        } catch (error) {
+            console.error("임시저장 글 삭제 오류:", error);
+            alert('임시저장 글을 삭제하는 중 오류가 발생했습니다.');
+        }
+    }
+
+
     async function restoreWritingFromTrash(trashId) {
         if (!currentUser || !trashId) return;
         const trashDocRef = doc(db, `users/${currentUser.uid}/trash`, trashId);
