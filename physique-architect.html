@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Physique Architect OS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="physique-architect.css">
+</head>
+<body>
+    <div class="container">
+        <header class="main-header">
+            <h1>Physique Architect OS</h1>
+            <p>데이터 기반 신체 설계 운영체제</p>
+        </header>
+
+        <div class="architect-grid">
+            <aside class="dashboard-panel">
+                <div class="card">
+                    <h2 class="card-title">Daily Summary</h2>
+                    <div class="daily-stats">
+                        <div class="stat-item">
+                            <label>체중 (kg)</label>
+                            <input type="number" id="current-weight-input" class="stat-input" placeholder="오늘 체중 입력">
+                        </div>
+                        <div class="stat-item">
+                            <label>목표 칼로리 (kcal)</label>
+                            <input type="number" id="calorie-goal-input" class="stat-input" value="3000">
+                        </div>
+                    </div>
+                    <div class="calorie-tracker">
+                        <div class="calorie-chart-container">
+                            <canvas id="calorie-chart"></canvas>
+                            <div id="calorie-chart-text" class="chart-text">
+                                <span id="consumed-calories">0</span>
+                                <small>/ <span id="goal-calories">3000</span> kcal</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="card">
+                    <h2 class="card-title">Body Metric Trends (52 Weeks)</h2>
+                    <div class="chart-container-large">
+                        <canvas id="body-metric-chart"></canvas>
+                    </div>
+                </div>
+            </aside>
+
+            <main class="action-zone">
+                <div class="tabs">
+                    <button class="tab-link active" data-tab="nutrition"><i class="fas fa-utensils"></i> Nutrition Log</button>
+                    <button class="tab-link" data-tab="workout"><i class="fas fa-dumbbell"></i> Workout Log</button>
+                </div>
+
+                <div id="nutrition" class="tab-content active">
+                    <div class="log-header">
+                        <h3>오늘의 식단</h3>
+                        <button id="add-meal-btn" class="add-btn"><i class="fas fa-plus"></i> AI로 식단 추가</button>
+                    </div>
+                    <div id="meal-log-container" class="log-container">
+                        </div>
+                </div>
+
+                <div id="workout" class="tab-content">
+                    <div class="log-header">
+                        <h3>오늘의 운동</h3>
+                        <button id="add-workout-btn" class="add-btn"><i class="fas fa-plus"></i> 운동 추가</button>
+                    </div>
+                    <div id="workout-log-container" class="log-container">
+                        </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <div id="meal-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>AI 식단 분석</h2>
+            <p>섭취한 음식 내용을 자유롭게 입력해주세요. (예: 밥 한공기, 닭가슴살 200g)</p>
+            <textarea id="natural-meal-input" placeholder="음식 입력..."></textarea>
+            <button id="analyze-meal-btn">분석하기</button>
+            <div id="meal-analysis-result" style="display:none;">
+                <h4>분석 결과</h4>
+                <ul id="analyzed-items-list"></ul>
+                <div class="total-calories">
+                    <strong>총 칼로리: <span id="modal-total-calories">0</span> kcal</strong>
+                </div>
+                <button id="confirm-add-meal-btn">식단에 추가</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="workout-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h2>운동 선택</h2>
+            <input type="text" id="workout-search-input" placeholder="운동 검색...">
+            <div class="workout-categories">
+                <button class="category-btn active" data-category="all">전체</button>
+                <button class="category-btn" data-category="상체">상체</button>
+                <button class="category-btn" data-category="등">등</button>
+                <button class="category-btn" data-category="하체">하체</button>
+            </div>
+            <ul id="workout-selection-list"></ul>
+        </div>
+    </div>
+    
+    <audio id="timer-alarm" src="https://cdn.jsdelivr.net/gh/Project-Hyper-Growth/alarm-sounds/alarm.mp3" preload="auto"></audio>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="physique-architect.js"></script>
+</body>
+</html>

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>모바일 글쓰기 모드</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="editor-popup.css">
+</head>
+<body>
+    <div class="editor-container">
+        <header class="editor-header">
+            <h1>모바일 글쓰기</h1>
+            <div class="button-group">
+                <button id="save-and-close-btn">저장 후 닫기</button>
+                <button id="save-and-blog-btn" title="저장 후 블로그로 이동">
+                    <i class="fa-solid fa-n"></i>
+                </button>
+            </div>
+        </header>
+        <main class="editor-main">
+            <input type="text" id="popup-title" placeholder="제목을 입력하세요">
+            <textarea id="popup-content" placeholder="내용을 입력하세요..."></textarea>
+        </main>
+    </div>
+
+    <script>
+        const titleInput = document.getElementById('popup-title');
+        const contentInput = document.getElementById('popup-content');
+        const saveBtn = document.getElementById('save-and-close-btn');
+        const blogBtn = document.getElementById('save-and-blog-btn');
+
+        // 부모 창으로 데이터를 전송하는 공통 함수
+        function saveDataToParent() {
+            const data = {
+                title: titleInput.value,
+                content: contentInput.value,
+                id: localStorage.getItem('editingWritingId') || null
+            };
+            // window.opener가 존재하는지 확인하여 오류 방지
+            if (window.opener) {
+                window.opener.postMessage({ type: 'save-writing', payload: data }, '*');
+            }
+            localStorage.removeItem('editingWritingId'); // 사용 후 삭제
+        }
+
+        // '저장 후 닫기' 버튼
+        saveBtn.addEventListener('click', () => {
+            saveDataToParent();
+            window.close();
+        });
+
+        // '저장 후 블로그로 이동' 버튼
+        blogBtn.addEventListener('click', () => {
+            saveDataToParent();
+            // 네이버 블로그 글쓰기 URL (새 탭으로 열기)
+            const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
+            window.open(blogUrl, '_blank');
+            window.close(); // 팝업 창은 닫기
+        });
+
+        // 부모 창에서 전달한 수정할 글 데이터를 받아서 채우기
+        window.addEventListener('load', () => {
+            const writingData = localStorage.getItem('editingWritingData');
+            if (writingData) {
+                const { title, content } = JSON.parse(writingData);
+                titleInput.value = title;
+                contentInput.value = content;
+                localStorage.removeItem('editingWritingData'); // 사용 후 삭제
+            }
+        });
+    </script>
+</body>
+</html>
