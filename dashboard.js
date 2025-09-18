@@ -1,3 +1,5 @@
+// choijihoon9988-sudo/growth-engine/Growth-Engine-5abdd40852fe5bbd387120a5ee7089d50061a9cf/dashboard.js
+
 // [수정] firebase-config.js 내용을 통합하고, SDK import를 한 곳에서 관리
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-app.js";
 import { getAuth, signInWithEmailAndPassword, GoogleAuthProvider, signOut, onAuthStateChanged, signInWithPopup } from "https://www.gstatic.com/firebasejs/12.2.1/firebase-auth.js";
@@ -347,7 +349,9 @@ document.addEventListener('DOMContentLoaded', () => {
         currentWritingId = null;
     }
 
+    // [수정 완료] saveWriting 함수 부분
     async function saveWriting() {
+        // 버튼 비활성화
         saveBtn.disabled = true;
         blogBtn.disabled = true;
         saveBtn.textContent = '저장 중...';
@@ -358,7 +362,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!title || !content) {
                 alert('제목과 내용을 모두 입력해야 합니다.');
-                return false;
+                return false; // 저장 실패
             }
 
             const dataToSave = {
@@ -376,16 +380,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 const docRef = await addDoc(collectionRef, dataToSave);
                 currentWritingId = docRef.id;
             }
-            return true;
+            return true; // 저장 성공
+
         } catch (error) {
             console.error("Firestore 저장 오류:", error);
-            alert("글 저장에 실패했습니다. 다시 시도해 주세요.");
-            return false;
+            // [개선] 더 상세한 오류 메시지를 사용자에게 보여줌
+            let errorMessage = `글 저장에 실패했습니다. (오류: ${error.code || '알 수 없음'})`;
+            if (error.code === 'permission-denied') {
+                errorMessage = "권한이 없어 글을 저장할 수 없습니다. Firebase 보안 규칙을 확인해 주세요.";
+            } else if (error.code === 'unauthenticated') {
+                errorMessage = "로그인 상태가 아닙니다. 다시 로그인해 주세요.";
+            } else if (error.message.includes('400')) {
+                errorMessage = "잘못된 요청입니다. Firestore 데이터베이스가 활성화되었는지 확인해주세요.";
+            }
+            alert(errorMessage);
+            return false; // 저장 실패
         } finally {
+            // [수정] 성공/실패 여부와 관계없이 버튼 상태를 항상 원래대로 복구
             saveBtn.disabled = false;
             blogBtn.disabled = false;
             saveBtn.textContent = '저장 후 닫기';
-            blogBtn.innerHTML = '<i class="fa-solid fa-n"></i>';
+            blogBtn.innerHTML = '<i class="fa-solid fa-n"></i>'; // 아이콘으로 복구
         }
     }
 
