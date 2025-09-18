@@ -4,15 +4,26 @@ body {
     /* 네이버 블로그 앱에서 주로 사용하는 폰트와 유사하게 설정 */
     font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", "맑은 고딕", sans-serif;
     font-size: 16px; /* 본문 기본 폰트 크기 조정 */
-    background-color: #ffffff; /* 실제 앱과 유사한 흰색 배경 */
     color: #333;
 }
 
-.editor-container {
-    max-width: 100%; /* 모바일 뷰에서는 꽉 차게 보이도록 */
-    margin: 0 auto;
+/* [수정] 모달 컨테이너 스타일 */
+#editor-modal {
+    display: none; /* 기본적으로 숨겨둠 */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1000;
+    width: 95%; /* 모바일 환경에서 꽉 차게 */
+    max-width: 500px; /* PC 환경에서 최대 너비 제한 */
+    min-height: 80vh;
     background-color: #ffffff;
-    min-height: 100vh;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    border-radius: 12px;
+    box-sizing: border-box;
+    padding: 16px;
+    overflow-y: auto;
 }
 
 .editor-header {
@@ -79,7 +90,7 @@ body {
 
 
 .editor-main {
-    padding: 16px; /* 상하좌우 동일한 여백 */
+    padding: 16px 0; /* 모달 padding을 16px로 통일 */
 }
 
 #popup-title, #popup-content {
@@ -90,6 +101,7 @@ body {
     font-family: inherit;
     box-sizing: border-box;
     color: #333;
+    padding: 0 16px; /* 모달 padding을 고려한 입력창 padding */
 }
 
 #popup-title {
@@ -113,4 +125,17 @@ body {
 
 #popup-content::placeholder {
     color: #bbb;
+}
+
+/* 모바일 뷰에서는 너비가 좁아지도록 */
+@media (max-width: 600px) {
+   #editor-modal {
+        width: 100%;
+        max-width: none;
+        border-radius: 0;
+        min-height: 100vh;
+        transform: none;
+        top: 0;
+        left: 0;
+    }
 }

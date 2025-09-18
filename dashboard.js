@@ -12,6 +12,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentUser = null;
     let unsubscribeListeners = [];
     let statsChart, sentimentChart;
+    
+    // [수정] 모달 관련 DOM 요소 추가
+    const editorModal = document.getElementById('editor-modal');
+    const titleInput = document.getElementById('popup-title');
+    const contentInput = document.getElementById('popup-content');
+    const saveBtn = document.getElementById('save-and-close-btn');
+    const blogBtn = document.getElementById('save-and-blog-btn');
+    let currentWritingId = null;
 
     // DOM 요소 캐싱
     const loginScreen = document.getElementById('login-screen');
@@ -321,12 +329,54 @@ document.addEventListener('DOMContentLoaded', () => {
     function initReflectionHub() {
         const newWritingBtn = document.getElementById('new-writing-btn');
         newWritingBtn.addEventListener('click', () => {
-            localStorage.removeItem('editingWritingId');
-            localStorage.removeItem('editingWritingData');
-            window.open('editor-popup.html', 'editorPopup', 'width=800,height=600');
+            // [수정] 팝업 대신 모달을 표시
+            openEditorModal();
         });
         listenForWritings();
     }
+
+    function openEditorModal(writing = null, id = null) {
+        editorModal.style.display = 'block';
+        titleInput.value = writing ? writing.title : '';
+        contentInput.value = writing ? writing.content : '';
+        currentWritingId = id;
+    }
+
+    function closeEditorModal() {
+        editorModal.style.display = 'none';
+        currentWritingId = null;
+    }
+
+    // [수정] 글쓰기 창 저장 로직
+    async function saveWriting() {
+        const dataToSave = {
+            title: titleInput.value,
+            content: contentInput.value,
+            updatedAt: serverTimestamp()
+        };
+        const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
+        try {
+            if (currentWritingId) {
+                const docRef = doc(collectionRef, currentWritingId);
+                await updateDoc(docRef, dataToSave);
+            } else {
+                dataToSave.createdAt = serverTimestamp();
+                await addDoc(collectionRef, dataToSave);
+            }
+            closeEditorModal();
+        } catch (error) {
+            console.error("글 저장 실패:", error);
+        }
+    }
+
+    // [수정] 저장 버튼 이벤트 리스너
+    saveBtn.addEventListener('click', saveWriting);
+
+    blogBtn.addEventListener('click', async () => {
+        await saveWriting();
+        const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
+        window.open(blogUrl, '_blank');
+    });
 
     function listenForWritings() {
         if (!currentUser) return;
@@ -352,9 +402,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <p class="smart-item-date">${date}</p>
                 `;
                 item.addEventListener('click', () => {
-                    localStorage.setItem('editingWritingId', id);
-                    localStorage.setItem('editingWritingData', JSON.stringify({ title: writing.title, content: writing.content }));
-                    window.open('editor-popup.html', 'editorPopup', 'width=800,height=600');
+                    // [수정] 팝업 대신 모달을 표시
+                    openEditorModal(writing, id);
                 });
                 listElement.appendChild(item);
 
@@ -447,29 +496,4 @@ document.addEventListener('DOMContentLoaded', () => {
         const categoryResult = document.getElementById('category-result');
         categoryResult.textContent = data.categories.length > 0 ? data.categories[0].Name : '분류된 카테고리 없음';
     }
-
-    // --- POPUP MESSAGE LISTENER ---
-    window.addEventListener('message', async (event) => {
-        if (event.data.type === 'save-writing') {
-            const { id, title, content } = event.data.payload;
-            const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
-            const dataToSave = {
-                title,
-                content,
-                updatedAt: serverTimestamp()
-            };
-
-            try {
-                if (id) {
-                    const docRef = doc(collectionRef, id);
-                    await updateDoc(docRef, dataToSave);
-                } else {
-                    dataToSave.createdAt = serverTimestamp();
-                    await addDoc(collectionRef, dataToSave);
-                }
-            } catch (error) {
-                console.error("글 저장 실패:", error);
-            }
-        }
-    });
 });
