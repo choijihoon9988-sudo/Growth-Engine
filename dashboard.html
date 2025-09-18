@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Growth Engine Dashboard</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com">
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;700;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="dashboard.css">
@@ -92,7 +92,6 @@
                         </div>
                     </div>
                     <div class="header-right">
-
                         <select id="sort-options">
                             <option value="updatedAt-desc">수정 날짜 (최신순)</option>
                             <option value="createdAt-desc">게시 날짜 (최신순)</option>
@@ -105,6 +104,11 @@
                 </div>
                 <div id="tag-filter-container"></div>
                 <div id="smart-writing-list"></div>
+                <!-- AI 추천 결과를 위한 컨테이너 추가 -->
+                <div id="ai-recommendation-container" style="display: none;">
+                    <h3>혹시 이런 글을 찾으시나요? (AI 추천)</h3>
+                    <div id="ai-recommendation-list"></div>
+                </div>
             </div>
 
             <div id="analytics-hub" class="tab-content">

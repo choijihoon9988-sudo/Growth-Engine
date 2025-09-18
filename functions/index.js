@@ -1,69 +1,86 @@
-// [수정 완료] dashboard.js (saveWriting 함수 부분)
-    async function saveWriting() {
-        // 버튼 비활성화
-        saveBtn.disabled = true;
-        blogBtn.disabled = true;
-        saveBtn.textContent = '저장 중...';
+const functions = require("firebase-functions");
+const admin = require("firebase-admin");
+const { HttpsError } = require("firebase-functions/v1");
 
-        try {
-            const title = titleInput.value.trim();
-            const content = contentInput.value.trim();
+// Google Generative AI SDK import
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-            if (!title || !content) {
-                alert('제목과 내용을 모두 입력해야 합니다.');
-                return false; // 저장 실패
-            }
+admin.initializeApp();
 
-            const dataToSave = {
-                title: title,
-                content: content,
-                updatedAt: serverTimestamp()
-            };
-            const collectionRef = collection(db, `users/${currentUser.uid}/writings`);
+// Initialize Gemini AI with API Key from Firebase environment configuration
+// 네가 터미널에서 실행한 `firebase functions:config:set` 명령어로 키가 여기에 설정된다.
+// DEPRECATION NOTICE: 터미널의 경고 메시지처럼, 이 방식은 2026년 3월 이후 지원 중단된다.
+// 나중에는 .env 파일을 사용하는 방식으로 바꿔야 한다.
+let genAI;
+if (functions.config().gemini && functions.config().gemini.key) {
+    genAI = new GoogleGenerativeAI(functions.config().gemini.key);
+} else {
+    console.warn("Gemini API key가 Firebase 환경 변수에 설정되지 않았습니다.");
+}
 
-            if (currentWritingId) {
-                const docRef = doc(collectionRef, currentWritingId);
-                await updateDoc(docRef, dataToSave);
-            } else {
-                dataToSave.createdAt = serverTimestamp();
-                const docRef = await addDoc(collectionRef, dataToSave);
-                currentWritingId = docRef.id;
-            }
-            return true; // 저장 성공
-
-        } catch (error) {
-            console.error("Firestore 저장 오류:", error);
-            let errorMessage = "글 저장에 실패했습니다. 다시 시도해 주세요.";
-            if (error.code === 'permission-denied') {
-                errorMessage = "권한이 없어 글을 저장할 수 없습니다. Firebase 보안 규칙을 확인해 주세요.";
-            } else if (error.code === 'unauthenticated') {
-                errorMessage = "로그인 상태가 아닙니다. 다시 로그인해 주세요.";
-            }
-            alert(errorMessage);
-            return false; // 저장 실패
-        } finally {
-            // [수정] 성공/실패 여부와 관계없이 버튼 상태를 항상 원래대로 복구
-            saveBtn.disabled = false;
-            blogBtn.disabled = false;
-            saveBtn.textContent = '저장 후 닫기';
-            blogBtn.innerHTML = '<i class="fa-solid fa-n"></i>'; // 아이콘으로 복구
-        }
+exports.recommendWritings = functions.region("asia-northeast3").https.onCall(async (data, context) => {
+    if (!genAI) {
+        throw new HttpsError("failed-precondition", "Gemini AI가 설정되지 않았습니다. API 키를 확인하세요.");
     }
 
-    // '저장 후 닫기' 버튼 이벤트 리스너
-    saveBtn.addEventListener('click', async () => {
-        const success = await saveWriting();
-        if (success) {
-            closeEditorModal();
-        }
-    });
+    if (!context.auth) {
+        throw new HttpsError("unauthenticated", "인증된 사용자만 이 기능을 호출할 수 있습니다.");
+    }
 
-    // '저장 후 블로그로 이동' 버튼 이벤트 리스너
-    blogBtn.addEventListener('click', async () => {
-        const success = await saveWriting();
-        if (success) {
-            const blogUrl = "https://blog.naver.com/POST_WRITE.naver?blogId=tenmilli_10";
-            window.open(blogUrl, '_blank');
-            closeEditorModal();
+    const { searchTerm, allWritings } = data;
+    if (!searchTerm || !allWritings) {
+        throw new HttpsError("invalid-argument", "검색어와 전체 글 목록 데이터가 필요합니다.");
+    }
+    
+    // Gemini에게 보낼 데이터 양을 줄이기 위해 글 내용을 200자로 요약
+    const writingsForPrompt = allWritings.map(w => ({
+        id: w.id,
+        title: w.title,
+        content: w.content.substring(0, 200)
+    }));
+
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+
+    const prompt = `
+        당신은 개인 노트 앱의 지능형 검색 어시스턴트입니다.
+        사용자 검색어의 맥락적 의미를 분석해서, 아래의 글 목록 중에서 가장 관련성 높은 글 3개를 추천해주세요.
+        
+        사용자 검색어: "${searchTerm}"
+        
+        글 목록 JSON: ${JSON.stringify(writingsForPrompt)}
+
+        지침:
+        1. 사용자 검색어의 의미를 파악하세요. (예: "글쓰기 힘들다" -> 스트레스, 어려움, 고통)
+        2. 글 목록의 제목과 내용을 보고, 검색어와 의미적으로 가장 유사한 글을 찾으세요.
+        3. 각 추천 글에 대해 "id"와 0에서 100 사이의 "score"(유사도 점수)를 포함하여 응답하세요.
+        4. 반드시 [{"id": "...", "score": ...}] 형식의 JSON 배열만 반환하세요. 다른 설명은 절대 추가하지 마세요.
+    `;
+
+    try {
+        const result = await model.generateContent(prompt);
+        const response = result.response;
+        const jsonResponse = response.text().trim();
+        
+        const recommendedIdsWithScores = JSON.parse(jsonResponse);
+
+        if (!Array.isArray(recommendedIdsWithScores)) {
+             throw new Error("AI 응답이 유효한 JSON 배열이 아닙니다.");
         }
-    });
+
+        const recommendations = recommendedIdsWithScores.map(rec => {
+            const originalWriting = allWritings.find(w => w.id === rec.id);
+            return originalWriting ? { ...originalWriting, score: rec.score } : null;
+        }).filter(Boolean); 
+
+        return { recommendations };
+
+    } catch (error) {
+        console.error("AI 추천 생성 오류:", error);
+        if (error instanceof SyntaxError) {
+             console.error("AI 응답 파싱 실패. 응답 내용:", error.message);
+             return { recommendations: [] };
+        }
+        throw new HttpsError("internal", "AI 추천을 생성하는 데 실패했습니다.");
+    }
+});
+
