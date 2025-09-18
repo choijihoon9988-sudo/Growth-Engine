@@ -561,17 +561,22 @@ document.addEventListener('DOMContentLoaded', () => {
         
         unsubscribeListeners.writings = onSnapshot(q, (snapshot) => {
             // Firestore의 Timestamp 객체를 AI 함수로 보내기 전에 직렬화 가능한 ISO 문자열로 변환
-            const allWritings = snapshot.docs.map(doc => {
-                const data = doc.data();
-                return {
-                    id: doc.id,
-                    title: data.title,
-                    content: data.content,
-                    tags: data.tags || [],
-                    createdAt: data.createdAt?.toDate().toISOString(),
-                    updatedAt: data.updatedAt?.toDate().toISOString(),
-                };
-            });
+           // choijihoon9988-sudo/growth-engine/Growth-Engine-45f1f505b215ab4db35325a5066c15a197e51d9b/dashboard.js
+
+// ... 기존 코드 ...
+const allWritings = snapshot.docs.map(doc => {
+    const data = doc.data();
+    return {
+        id: doc.id,
+        title: data.title,
+        content: data.content,
+        tags: data.tags || [],
+        // Timestamp 객체를 ISO 문자열로 변환
+        createdAt: data.createdAt?.toDate().toISOString(),
+        updatedAt: data.updatedAt?.toDate().toISOString(),
+    };
+});
+// ... 이후 코드 ...
             
             const allTags = new Set(allWritings.flatMap(w => w.tags || []));
             renderTags(allTags);
